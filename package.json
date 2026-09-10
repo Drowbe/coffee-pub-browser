@@ -1,0 +1,78 @@
+{
+  "name": "coffee-pub-browser",
+  "productName": "Coffee Pub Browser",
+  "version": "1.0.0",
+  "description": "Wraps the FoundryVTT Game and Stream views in two fixed-size Chromium windows that OBS can capture as sources.",
+  "main": "src/main.js",
+  "private": true,
+  "license": "MIT",
+  "author": "Coffee Pub",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "dist:arm64": "electron-builder --mac --arm64",
+    "dist:x64": "electron-builder --mac --x64",
+    "pack": "electron-builder --mac --dir",
+    "check": "node --check src/main.js && node --check src/config.js && node --check src/preload.js && node --check src/control/control.js"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "live.coffeepub.browser",
+    "productName": "Coffee Pub Browser",
+    "copyright": "Copyright © 2026 Coffee Pub",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Coffee Pub Browser needs the microphone if you use FoundryVTT audio/video chat inside the Game window.",
+        "NSCameraUsageDescription": "Coffee Pub Browser needs the camera if you use FoundryVTT audio/video chat inside the Game window."
+      }
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}
