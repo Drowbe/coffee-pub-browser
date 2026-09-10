@@ -5,6 +5,7 @@ const fs = require('fs');
 const { app, BrowserWindow, WebContentsView, ipcMain, screen, shell, Menu, Tray, nativeImage, session, dialog, safeStorage } = require('electron');
 const { ConfigStore, LIMITS, REGION_LIMITS, DEFAULT_GROUP } = require('./config');
 const { ObsBridge } = require('./obs');
+const parkingGeometry = require('./parking');
 
 const APP_NAME = 'Coffee Pub Browser';
 
@@ -22,7 +23,7 @@ const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' 
 // Storage partition of the default session group ("Main"); other groups get
 // their own partition, see partitionFor().
 const PARTITION = 'persist:coffeepub';
-const DOCK_WIDTH = 36; // collapsed dock strip; parked windows keep this much on screen under it
+const DOCK_WIDTH = parkingGeometry.STRIP; // collapsed dock strip; parked windows keep this much on screen under it
 const DOCK_EXPANDED = 240;
 const BAR_HEIGHT = 28; // the app's own bar at the top of each window (cropped out in OBS)
 
@@ -615,15 +616,20 @@ function dockDisplay() {
   return screen.getAllDisplays().find((d) => d.id === wanted) || screen.getPrimaryDisplay();
 }
 
-// Where a window goes when parked: under the dock edge of its own display,
+// The edge a display parks toward: an edge with no display beyond it, so a
+// parked window never spills onto another monitor (which would change its
+// scale factor and therefore its captured size).
+function parkingEdgeFor(display) {
+  return parkingGeometry.parkingEdge(display, screen.getAllDisplays(), configStore.get().dock.side);
+}
+
+// Where a window goes when parked: hanging off its display's parking edge,
 // keeping DOCK_WIDTH points on screen so OBS keeps capturing it.
 function parkedPosition(win) {
-  const area = screen.getDisplayMatching(win.getBounds()).workArea;
-  const [w] = win.getContentSize();
-  const [, y] = win.getPosition();
-  return configStore.get().dock.side === 'left'
-    ? { x: area.x - w + DOCK_WIDTH, y }
-    : { x: area.x + area.width - DOCK_WIDTH, y };
+  const display = screen.getDisplayMatching(win.getBounds());
+  const [w, h] = win.getContentSize();
+  const [x, y] = win.getPosition();
+  return parkingGeometry.parkedPosition(parkingEdgeFor(display), display.workArea, x, y, w, h);
 }
 
 async function parkView(id) {
@@ -641,7 +647,8 @@ async function parkView(id) {
   }
   if (!isAlive(win)) return;
   const [x, y] = win.getPosition();
-  parked.set(id, { x, y, thumb });
+  const displayId = screen.getDisplayMatching(win.getBounds()).id;
+  parked.set(id, { x, y, thumb, displayId });
   parking = true;
   const target = parkedPosition(win);
   win.setPosition(target.x, target.y);
@@ -650,6 +657,7 @@ async function parkView(id) {
   }, 300);
   collapsed = parked.size > 0;
   buildMenu();
+  layoutDock();
   broadcastStatus();
 }
 
@@ -668,6 +676,7 @@ function restoreView(id) {
   }
   collapsed = parked.size > 0;
   buildMenu();
+  layoutDock();
   broadcastStatus();
 }
 
@@ -682,10 +691,7 @@ function expandViews() {
 // --- Dock window and cover strips ---
 
 function dockBounds(display, expanded) {
-  const area = display.workArea;
-  const width = expanded ? DOCK_EXPANDED : DOCK_WIDTH;
-  const left = configStore.get().dock.side === 'left';
-  return { x: left ? area.x : area.x + area.width - width, y: area.y, width, height: area.height };
+  return parkingGeometry.stripBounds(configStore.get().dock.side, display.workArea, expanded ? DOCK_EXPANDED : DOCK_WIDTH);
 }
 
 function edgeWindowOptions(extra) {
@@ -715,7 +721,8 @@ function dockState() {
       const open = isAlive(win);
       const entry = parked.get(view.id);
       const [width, height] = open ? pageSize(win) : [view.width, view.height];
-      return { id: view.id, label: view.label, open, parked: Boolean(entry), thumb: entry ? entry.thumb : '', width, height };
+      const edge = open ? parkingEdgeFor(screen.getDisplayMatching(win.getBounds())) : null;
+      return { id: view.id, label: view.label, open, parked: Boolean(entry), thumb: entry ? entry.thumb : '', width, height, edge };
     }),
   };
 }
@@ -724,29 +731,38 @@ function sendDockState() {
   if (isAlive(dockWindow) && !dockWindow.webContents.isDestroyed()) dockWindow.webContents.send('dock:state', dockState());
 }
 
+// Cover strips hide parked slivers on any (display, edge) the dock itself
+// does not cover, and only while something is parked there.
 function layoutDock() {
   if (!isAlive(dockWindow)) return;
   const display = dockDisplay();
+  const side = configStore.get().dock.side;
   dockWindow.setBounds(dockBounds(display, dockExpanded), false);
-  // Cover strips on every other display hide the parked slivers there.
-  const wanted = new Set(screen.getAllDisplays().filter((d) => d.id !== display.id).map((d) => d.id));
+
+  const parkedOn = new Set([...parked.values()].map((p) => p.displayId));
+  const wanted = new Map();
+  for (const d of screen.getAllDisplays()) {
+    if (!parkedOn.has(d.id)) continue;
+    const edge = parkingEdgeFor(d);
+    if (d.id === display.id && edge === side) continue; // the dock covers it
+    wanted.set(d.id, parkingGeometry.stripBounds(edge, d.workArea));
+  }
   for (const [id, strip] of coverStrips) {
     if (!wanted.has(id)) {
       if (isAlive(strip)) strip.destroy();
       coverStrips.delete(id);
     }
   }
-  for (const d of screen.getAllDisplays()) {
-    if (d.id === display.id) continue;
-    let strip = coverStrips.get(d.id);
+  for (const [id, bounds] of wanted) {
+    let strip = coverStrips.get(id);
     if (!isAlive(strip)) {
-      strip = new BrowserWindow(edgeWindowOptions({ focusable: false, ...dockBounds(d, false) }));
+      strip = new BrowserWindow(edgeWindowOptions({ focusable: false, ...bounds }));
       strip.setAlwaysOnTop(true, 'floating');
       strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       strip.loadURL('data:text/html,<body style="margin:0;background:%231a1410"></body>');
-      coverStrips.set(d.id, strip);
+      coverStrips.set(id, strip);
     }
-    strip.setBounds(dockBounds(d, false), false);
+    strip.setBounds(bounds, false);
     strip.showInactive();
   }
 }

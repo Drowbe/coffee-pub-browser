@@ -107,10 +107,12 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    Session tab. Hover it to expand it: one card per window with a thumbnail taken when it was
    parked. Click a card to park that window under the dock or bring it back; **Park all** and
    **Restore all** do it for every window, as does Cmd+Shift+C. A parked window keeps a sliver
-   on screen under the dock, so OBS keeps capturing it, whereas hiding or minimizing a window
-   stops the capture. Windows park on the display they are on; other displays get a matching
-   cover strip so nothing peeks out. Turn the dock off on the Session tab if you do not want
-   it.
+   on screen, so OBS keeps capturing it, whereas hiding or minimizing a window stops the
+   capture. Windows park on the display they are on, toward an edge that has no other monitor
+   beyond it (the dock's side when free, otherwise the opposite side, then the bottom), so a
+   parked window never slides onto another screen or changes its captured size. A cover strip
+   appears along that edge while something is parked there. Turn the dock off on the Session
+   tab if you do not want it.
 8. The optional **menu bar icon** (Session tab) offers Start, Stop, Park, Sync OBS and Quit,
    and can hide the Dock icon so the app behaves like a utility.
 9. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
@@ -318,6 +320,7 @@ src/preload.js         Bridge between the control panel page and the main proces
 src/bar-preload.js     Bridge between a window's bar page and the main process
 src/control/           Control panel page (HTML, CSS, JS)
 src/dock/              Edge dock page (HTML, CSS, JS); src/dock-preload.js bridges it
+src/parking.js         Geometry for parking windows off a free display edge
 src/bar/               The bar at the top of each window (HTML, CSS, JS); add per-window controls here
 build/icon.svg         App icon source; build/icon.png is generated from it
 ```
