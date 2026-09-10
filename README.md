@@ -164,16 +164,13 @@ Settings are stored as JSON at
 
 ## Releasing a new version
 
-1. Bump `version` in `package.json` and commit.
-2. Tag the commit and push the tag:
+1. Bump `version` in `package.json`, commit and push.
+2. On GitHub, open **Actions > Build macOS app > Run workflow**, choose the branch, enter the
+   new tag in **release_tag** (for example `v1.1.0`) and click **Run workflow**.
+3. About five minutes later a GitHub Release named after the tag appears with the `.dmg`
+   attached and auto-generated notes. The workflow creates the git tag for you.
 
-   ```bash
-   git tag v1.1.0
-   git push origin v1.1.0
-   ```
-
-3. The workflow builds the app on a macOS runner and creates a GitHub Release named after the
-   tag with the `.dmg` attached and auto-generated notes. It takes about five minutes.
+Pushing a tag that starts with `v` from your machine triggers the same release build.
 
 ## Project layout
 

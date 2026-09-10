@@ -5,6 +5,11 @@ on:
     branches: ['**']
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Publish a GitHub Release with this tag, e.g. v1.0.0 (leave empty to only build)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -43,10 +48,12 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
-      - name: Publish release for tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          name: Coffee Pub Browser ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Coffee Pub Browser ${{ inputs.release_tag || github.ref_name }}
           generate_release_notes: true
           files: dist/*.dmg
