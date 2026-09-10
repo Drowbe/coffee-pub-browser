@@ -23,8 +23,8 @@ const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' 
 // Storage partition of the default session group ("Main"); other groups get
 // their own partition, see partitionFor().
 const PARTITION = 'persist:coffeepub';
-const DOCK_WIDTH = parkingGeometry.STRIP; // collapsed dock strip; parked windows keep this much on screen under it
-const DOCK_EXPANDED = 240;
+const DOCK_WIDTH = parkingGeometry.STRIP; // collapsed dock pill width
+const DOCK_EXPANDED = 260; // expanded dock pill width
 const BAR_HEIGHT = 28; // the app's own bar at the top of each window (cropped out in OBS)
 
 // Session group -> storage partition. "Main" keeps the original partition so
@@ -629,7 +629,7 @@ function parkedPosition(win) {
   const display = screen.getDisplayMatching(win.getBounds());
   const [w, h] = win.getContentSize();
   const [x, y] = win.getPosition();
-  return parkingGeometry.parkedPosition(parkingEdgeFor(display), display.workArea, x, y, w, h);
+  return parkingGeometry.parkedPosition(parkingEdgeFor(display), display.workArea, x, y, w, h, configStore.get().dock.overlap);
 }
 
 async function parkView(id) {
@@ -690,8 +690,15 @@ function expandViews() {
 
 // --- Dock window and cover strips ---
 
+// The dock pill is sized to its contents and centred on the display edge.
+function dockSize(expanded) {
+  const n = configStore.get().views.length;
+  if (!expanded) return { width: DOCK_WIDTH, height: 92 + n * 16 };
+  return { width: DOCK_EXPANDED, height: 190 + n * 118 };
+}
+
 function dockBounds(display, expanded) {
-  return parkingGeometry.stripBounds(configStore.get().dock.side, display.workArea, expanded ? DOCK_EXPANDED : DOCK_WIDTH);
+  return parkingGeometry.pillBounds(configStore.get().dock.side, display.workArea, dockSize(expanded));
 }
 
 function edgeWindowOptions(extra) {
@@ -699,6 +706,7 @@ function edgeWindowOptions(extra) {
     frame: false,
     roundedCorners: false,
     hasShadow: false,
+    transparent: true,
     resizable: false,
     movable: false,
     minimizable: false,
@@ -707,7 +715,6 @@ function edgeWindowOptions(extra) {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
-    backgroundColor: '#1a1410',
     ...extra,
   };
 }
@@ -716,13 +723,24 @@ function dockState() {
   return {
     side: configStore.get().dock.side,
     obsConnected: obs.connected,
+    outputs: obs.status().outputs,
     windows: configStore.get().views.map((view) => {
       const win = viewWindows.get(view.id);
       const open = isAlive(win);
       const entry = parked.get(view.id);
       const [width, height] = open ? pageSize(win) : [view.width, view.height];
       const edge = open ? parkingEdgeFor(screen.getDisplayMatching(win.getBounds())) : null;
-      return { id: view.id, label: view.label, open, parked: Boolean(entry), thumb: entry ? entry.thumb : '', width, height, edge };
+      return {
+        id: view.id,
+        label: view.label,
+        open,
+        parked: Boolean(entry),
+        thumb: entry ? entry.thumb : '',
+        width,
+        height,
+        edge,
+        sources: view.obsSources,
+      };
     }),
   };
 }
@@ -731,21 +749,18 @@ function sendDockState() {
   if (isAlive(dockWindow) && !dockWindow.webContents.isDestroyed()) dockWindow.webContents.send('dock:state', dockState());
 }
 
-// Cover strips hide parked slivers on any (display, edge) the dock itself
-// does not cover, and only while something is parked there.
+// Thin cover strips hide the parked slivers along the edge each display
+// parks toward, only while something is parked there.
 function layoutDock() {
   if (!isAlive(dockWindow)) return;
-  const display = dockDisplay();
-  const side = configStore.get().dock.side;
-  dockWindow.setBounds(dockBounds(display, dockExpanded), false);
+  dockWindow.setBounds(dockBounds(dockDisplay(), dockExpanded), false);
 
+  const overlap = configStore.get().dock.overlap;
   const parkedOn = new Set([...parked.values()].map((p) => p.displayId));
   const wanted = new Map();
   for (const d of screen.getAllDisplays()) {
-    if (!parkedOn.has(d.id)) continue;
-    const edge = parkingEdgeFor(d);
-    if (d.id === display.id && edge === side) continue; // the dock covers it
-    wanted.set(d.id, parkingGeometry.stripBounds(edge, d.workArea));
+    if (!parkedOn.has(d.id) || overlap <= 0) continue; // fully off screen needs no cover
+    wanted.set(d.id, parkingGeometry.stripBounds(parkingEdgeFor(d), d.workArea, overlap));
   }
   for (const [id, strip] of coverStrips) {
     if (!wanted.has(id)) {
@@ -759,7 +774,7 @@ function layoutDock() {
       strip = new BrowserWindow(edgeWindowOptions({ focusable: false, ...bounds }));
       strip.setAlwaysOnTop(true, 'floating');
       strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      strip.loadURL('data:text/html,<body style="margin:0;background:%231a1410"></body>');
+      strip.loadURL('data:text/html,<body style="margin:0;height:100vh;background:%23120d0a"></body>');
       coverStrips.set(id, strip);
     }
     strip.setBounds(bounds, false);
@@ -925,7 +940,7 @@ function buildMenu() {
         { label: 'Close All', click: () => closeAllViews() },
         { type: 'separator' },
         {
-          label: collapsed ? 'Restore Windows' : 'Park Windows Under the Dock',
+          label: collapsed ? 'Undock Windows' : 'Dock Windows',
           accelerator: 'CmdOrCtrl+Shift+C',
           click: () => (collapsed ? expandViews() : collapseViews()),
         },
@@ -983,7 +998,7 @@ function trayMenuTemplate() {
     { label: 'Stop All', click: () => closeAllViews() },
     { type: 'separator' },
     {
-      label: collapsed ? 'Restore Windows' : 'Park Windows Under the Dock',
+      label: collapsed ? 'Undock Windows' : 'Dock Windows',
       enabled: viewWindows.size > 0,
       click: () => (collapsed ? expandViews() : collapseViews()),
     },

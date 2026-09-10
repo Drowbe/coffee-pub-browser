@@ -18,7 +18,7 @@
     <div class="topbar-actions">
       <button id="open-all" class="btn btn-primary" type="button">Start All</button>
       <button id="close-all" class="btn" type="button">Stop All</button>
-      <button id="collapse" class="btn" type="button" title="Park the windows under the edge dock; OBS keeps capturing them">Park all</button>
+      <button id="collapse" class="btn" type="button" title="Slide the windows off screen into the dock; OBS keeps capturing them">Dock Windows</button>
     </div>
   </header>
 
@@ -52,7 +52,11 @@
               <option value="left">Left edge</option>
             </select>
           </label>
-          <span class="hint">Hover the dock to see every window; click one to park it under the dock or bring it back. Parked windows stay captured by OBS.</span>
+          <label class="field field-inline">
+            <span>Overlap</span>
+            <input id="dock-overlap" type="number" min="0" max="36" step="1" size="4" title="Points of a docked window left on screen; 0 slides it fully off screen">
+          </label>
+          <span class="hint">Hover the dock to see every window; click one to dock it or bring it back. Docked windows stay captured by OBS while some of the window is on screen; try Overlap 0 to test fully off screen.</span>
         </div>
         <div class="row checks-column">
           <label class="check">

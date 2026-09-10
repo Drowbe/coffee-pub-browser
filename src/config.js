@@ -84,7 +84,8 @@ function sanitizeRegions(value) {
 }
 
 function defaultDock() {
-  return { enabled: true, side: 'right' };
+  // overlap: points of a docked window left on screen (0 = fully off screen).
+  return { enabled: true, side: 'right', overlap: 6 };
 }
 
 function sanitizeDock(input) {
@@ -93,6 +94,7 @@ function sanitizeDock(input) {
   return {
     enabled: src.enabled === undefined ? d.enabled : Boolean(src.enabled),
     side: src.side === 'left' ? 'left' : 'right',
+    overlap: clamp(toInt(src.overlap, d.overlap), 0, 36),
   };
 }
 

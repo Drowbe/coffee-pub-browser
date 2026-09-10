@@ -103,17 +103,18 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    from the top-left corner of a display, wrapping to a new row when they no longer fit.
 6. New windows start with no URL and show a placeholder until you enter one. Each window is
    listed in OBS by its label, so give every window a different label.
-7. The **edge dock** is a 36 pt strip at the right (or left) edge of the display chosen on the
-   Session tab. Hover it to expand it: one card per window with a thumbnail taken when it was
-   parked. Click a card to park that window under the dock or bring it back; **Park all** and
-   **Restore all** do it for every window, as does Cmd+Shift+C. A parked window keeps a sliver
-   on screen, so OBS keeps capturing it, whereas hiding or minimizing a window stops the
-   capture. Windows park on the display they are on, toward an edge that has no other monitor
-   beyond it (the dock's side when free, otherwise the opposite side, then the bottom), so a
-   parked window never slides onto another screen or changes its captured size. A cover strip
-   appears along that edge while something is parked there. Turn the dock off on the Session
-   tab if you do not want it.
-8. The optional **menu bar icon** (Session tab) offers Start, Stop, Park, Sync OBS and Quit,
+7. The **edge dock** is a small rounded pill on the right (or left) edge of the display chosen
+   on the Session tab, with a dot per window and a blinking red dot while OBS records. Hover
+   it to expand it: REC and LIVE timers, the current OBS scene, and one card per window with
+   its state, OBS source and a thumbnail taken when it was docked. Click a card to dock that
+   window (slide it off screen) or bring it back; **Dock Windows** and **Undock Windows** do
+   it for every window, as does Cmd+Shift+C. A docked window keeps a 6 pt sliver on screen
+   under a thin dark line, so OBS keeps capturing it, whereas hiding or minimizing a window
+   stops the capture. Windows dock on the display they are on, toward an edge that has no
+   other monitor beyond it (the dock's side when free, otherwise the opposite side, then the
+   bottom), so a docked window never slides onto another screen or changes its captured size.
+   Turn the dock off on the Session tab if you do not want it.
+8. The optional **menu bar icon** (Session tab) offers Start, Stop, Dock, Sync OBS and Quit,
    and can hide the Dock icon so the app behaves like a utility.
 9. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
    it with **Cmd+0** or by clicking the Dock icon. Quit with **Cmd+Q**.
@@ -200,7 +201,7 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | Shortcut | Action |
 | --- | --- |
 | Cmd+0 | Show the control panel |
-| Cmd+Shift+C | Park all windows under the edge dock, or restore them |
+| Cmd+Shift+C | Dock all windows (slide them off screen), or undock them |
 | Cmd+1 to Cmd+5 | Open (or focus) window 1 to 5 |
 | Cmd+Shift+1 to Cmd+Shift+5 | Reload window 1 to 5 |
 | Cmd+R | Reload the focused window |
@@ -269,7 +270,7 @@ Settings are stored as JSON at
 | Field | Meaning |
 | --- | --- |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
-| `dock` | The edge dock: `enabled` and `side` (`right` or `left`). It lives on the display chosen for auto-arrange. |
+| `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |

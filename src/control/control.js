@@ -23,6 +23,7 @@ const obsAutoEl = $('obs-auto');
 const collapseEl = $('collapse');
 const dockEnabledEl = $('dock-enabled');
 const dockSideEl = $('dock-side');
+const dockOverlapEl = $('dock-overlap');
 
 let config = null;
 let status = { views: [], displays: [], obs: { state: 'disconnected', inputs: [] }, collapsed: false };
@@ -167,6 +168,7 @@ function applyConfig(next) {
   dockEnabledEl.checked = config.dock.enabled;
   dockSideEl.value = config.dock.side;
   dockSideEl.disabled = !config.dock.enabled;
+  if (document.activeElement !== dockOverlapEl) dockOverlapEl.value = String(config.dock.overlap);
   renderSessionGroups();
   hideDockIconEl.checked = config.hideDockIcon;
   hideDockIconEl.disabled = !config.menuBarIcon;
@@ -268,7 +270,7 @@ function renderObs() {
 function renderStatus() {
   const o = status.obs || { state: 'disconnected', inputs: [] };
   const connected = o.state === 'connected';
-  collapseEl.textContent = status.collapsed ? 'Restore all' : 'Park all';
+  collapseEl.textContent = status.collapsed ? 'Undock Windows' : 'Dock Windows';
   collapseEl.disabled = !status.views.some((v) => v.open);
 
   for (const view of config.views) {
@@ -661,7 +663,7 @@ async function flushSave() {
     config.openOnLaunch = openOnLaunchEl.checked;
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
-    config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right' };
+    config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right', overlap: Number(dockOverlapEl.value) };
     if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
     const saved = await api.saveConfig(config);
     setSaveState('All changes saved');
@@ -686,7 +688,7 @@ arrangeDisplayEl.addEventListener('change', () => {
   config.arrangeDisplayId = Number(arrangeDisplayEl.value);
   scheduleSave();
 });
-for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl]) el.addEventListener('change', scheduleSave);
+for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl]) el.addEventListener('change', scheduleSave);
 $('clear-session').addEventListener('click', () => api.clearSession());
 $('reveal-config').addEventListener('click', () => api.revealConfig());
 $('reset-config').addEventListener('click', async () => {

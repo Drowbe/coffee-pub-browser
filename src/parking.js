@@ -3,12 +3,13 @@
 // Geometry for parking windows under the edge dock. Pure functions so multi-
 // display layouts can be tested without a screen.
 //
-// A parked window keeps STRIP points on its own display and hangs the rest
+// A parked window keeps OVERLAP points on its own display and hangs the rest
 // off an edge that has no display beyond it. That keeps the window on the
 // display it started on (same scale factor, same OBS crop) while nothing of
-// it is visible except the sliver under the dock or a cover strip.
+// it is visible except a sliver hidden under a thin cover strip.
 
-const STRIP = 36;
+const STRIP = 36; // width of the collapsed dock pill
+const OVERLAP = 6; // points of a parked window left on screen
 
 const OPPOSITE = { right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
 
@@ -40,24 +41,25 @@ function parkingEdge(display, displays, side) {
   return order.find((edge) => free[edge]) || side;
 }
 
-// Position of a parked window of content size [w, h] currently at (x, y).
-function parkedPosition(edge, area, x, y, w, h) {
+// Position of a parked window of content size [w, h] currently at (x, y),
+// leaving `overlap` points on screen.
+function parkedPosition(edge, area, x, y, w, h, overlap = OVERLAP) {
   switch (edge) {
     case 'left':
-      return { x: area.x - w + STRIP, y };
+      return { x: area.x - w + overlap, y };
     case 'bottom':
-      return { x, y: area.y + area.height - STRIP };
+      return { x, y: area.y + area.height - overlap };
     case 'top':
-      return { x, y: area.y - h + STRIP };
+      return { x, y: area.y - h + overlap };
     case 'right':
     default:
-      return { x: area.x + area.width - STRIP, y };
+      return { x: area.x + area.width - overlap, y };
   }
 }
 
 // Bounds of a strip along `edge` of a work area; `width` is the strip's
-// thickness (STRIP for cover strips, wider for the expanded dock).
-function stripBounds(edge, area, width = STRIP) {
+// thickness (OVERLAP for cover strips).
+function stripBounds(edge, area, width = OVERLAP) {
   switch (edge) {
     case 'left':
       return { x: area.x, y: area.y, width, height: area.height };
@@ -71,4 +73,12 @@ function stripBounds(edge, area, width = STRIP) {
   }
 }
 
-module.exports = { STRIP, freeEdges, parkingEdge, parkedPosition, stripBounds };
+// Bounds of the dock pill: `size` is { width, height }, centred along `side`.
+function pillBounds(side, area, size) {
+  const height = Math.min(size.height, area.height);
+  const y = Math.round(area.y + (area.height - height) / 2);
+  const x = side === 'left' ? area.x : area.x + area.width - size.width;
+  return { x, y, width: size.width, height };
+}
+
+module.exports = { STRIP, OVERLAP, freeEdges, parkingEdge, parkedPosition, stripBounds, pillBounds };

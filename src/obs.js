@@ -33,8 +33,11 @@ class ObsBridge extends EventEmitter {
     this.lastSync = null;
     this.reconnectTimer = null;
     this.connecting = null;
+    this.outputs = { recording: false, recordTime: '', streaming: false, streamTime: '', scene: '' };
+    this.pollTimer = null;
 
     this.obs.on('ConnectionClosed', (err) => {
+      this.stopPolling();
       if (this.suspended) return; // our own disconnect() already reported it
       const wasConnected = this.state === 'connected';
       this.inputs = [];
@@ -53,7 +56,46 @@ class ObsBridge extends EventEmitter {
       obsVersion: this.obsVersion,
       inputs: this.inputs.map((i) => i.name),
       lastSync: this.lastSync,
+      outputs: this.outputs,
     };
+  }
+
+  // Record/stream state and current scene, refreshed every couple of seconds
+  // while connected (shown in the dock).
+  async pollOutputs() {
+    if (!this.connected) return;
+    try {
+      const [rec, stream, scene] = await Promise.all([
+        this.obs.call('GetRecordStatus'),
+        this.obs.call('GetStreamStatus'),
+        this.obs.call('GetCurrentProgramScene'),
+      ]);
+      const next = {
+        recording: Boolean(rec.outputActive),
+        recordTime: rec.outputActive ? String(rec.outputTimecode || '').replace(/\.\d+$/, '') : '',
+        streaming: Boolean(stream.outputActive),
+        streamTime: stream.outputActive ? String(stream.outputTimecode || '').replace(/\.\d+$/, '') : '',
+        scene: scene.currentProgramSceneName || '',
+      };
+      if (JSON.stringify(next) !== JSON.stringify(this.outputs)) {
+        this.outputs = next;
+        this.emit('status', this.status());
+      }
+    } catch (err) {
+      // Older OBS versions may lack one of these; ignore.
+    }
+  }
+
+  startPolling() {
+    this.stopPolling();
+    this.pollTimer = setInterval(() => this.pollOutputs(), 2000);
+    this.pollOutputs();
+  }
+
+  stopPolling() {
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
+    this.outputs = { recording: false, recordTime: '', streaming: false, streamTime: '', scene: '' };
   }
 
   setState(state, message = '') {
@@ -81,6 +123,7 @@ class ObsBridge extends EventEmitter {
   // User-initiated disconnect: pauses auto-reconnect until the next connect().
   async disconnect() {
     clearTimeout(this.reconnectTimer);
+    this.stopPolling();
     this.suspended = true;
     this.inputs = [];
     if (this.connected) {
@@ -109,6 +152,7 @@ class ObsBridge extends EventEmitter {
         this.obsVersion = version.obsVersion || this.obsVersion;
         await this.refreshInputs();
         this.setState('connected', `Connected to OBS ${this.obsVersion}.`);
+        this.startPolling();
         this.emit('connected');
       } catch (err) {
         const text = describeError(err);

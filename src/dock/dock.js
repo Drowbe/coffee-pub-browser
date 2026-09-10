@@ -1,25 +1,41 @@
 'use strict';
 
-const dotsEl = document.getElementById('dots');
-const cardsEl = document.getElementById('cards');
-const obsEl = document.getElementById('obs');
-const syncEl = document.getElementById('sync');
-let state = { side: 'right', windows: [], obsConnected: false };
+const $ = (id) => document.getElementById(id);
+let state = { side: 'right', windows: [], obsConnected: false, outputs: {} };
 
 function render() {
   document.body.classList.toggle('side-left', state.side === 'left');
-  dotsEl.textContent = '';
-  cardsEl.textContent = '';
+  const outputs = state.outputs || {};
+
+  // Collapsed strip
+  const dots = $('dots');
+  dots.textContent = '';
   for (const w of state.windows) {
     const dot = document.createElement('span');
     dot.className = `dot${w.open ? ' on' : ''}${w.parked ? ' parked' : ''}`;
-    dot.title = w.label;
-    dotsEl.appendChild(dot);
+    dot.title = `${w.label}: ${w.parked ? 'docked' : w.open ? 'on screen' : 'stopped'}`;
+    dots.appendChild(dot);
+  }
+  $('rec-dot').hidden = !outputs.recording;
+  $('live-dot').hidden = !outputs.streaming;
 
+  // Expanded panel
+  const obsState = $('obs-state');
+  obsState.textContent = state.obsConnected ? 'OBS connected' : 'OBS offline';
+  obsState.classList.toggle('on', state.obsConnected);
+  $('rec').hidden = !outputs.recording;
+  $('rec-time').textContent = outputs.recordTime || '';
+  $('live').hidden = !outputs.streaming;
+  $('live-time').textContent = outputs.streamTime || '';
+  $('scene').textContent = state.obsConnected && outputs.scene ? `Scene: ${outputs.scene}` : '';
+
+  const cards = $('cards');
+  cards.textContent = '';
+  for (const w of state.windows) {
     const card = document.createElement('div');
     card.className = `card${w.parked ? ' parked' : ''}`;
     card.dataset.id = w.id;
-    card.title = w.open ? (w.parked ? 'Click to restore' : 'Click to park under the dock') : 'Click to start';
+    card.title = w.open ? (w.parked ? 'Click to undock' : 'Click to dock') : 'Click to start';
     const head = document.createElement('div');
     head.className = 'card-head';
     const d = document.createElement('span');
@@ -46,14 +62,21 @@ function render() {
       empty.textContent = w.open ? 'on screen' : 'stopped';
       card.appendChild(empty);
     }
-    const hint = document.createElement('div');
-    hint.className = 'card-hint';
-    hint.textContent = w.parked ? 'parked' : w.open ? 'on screen' : 'stopped';
-    card.appendChild(hint);
-    cardsEl.appendChild(card);
+    const foot = document.createElement('div');
+    foot.className = 'card-foot';
+    const st = document.createElement('span');
+    st.className = 'state';
+    st.textContent = w.parked ? 'docked' : w.open ? 'on screen' : 'stopped';
+    foot.appendChild(st);
+    const src = document.createElement('span');
+    src.className = 'src';
+    src.textContent = w.sources && w.sources.length ? w.sources.join(', ') : 'no OBS source';
+    src.title = src.textContent;
+    foot.appendChild(src);
+    card.appendChild(foot);
+    cards.appendChild(card);
   }
-  obsEl.classList.toggle('on', state.obsConnected);
-  syncEl.disabled = !state.obsConnected;
+  $('sync').disabled = !state.obsConnected;
 }
 
 window.dock.onState((next) => {
@@ -70,7 +93,7 @@ document.body.addEventListener('mouseleave', () => {
   window.dock.hover(false);
 });
 
-cardsEl.addEventListener('click', (event) => {
+$('cards').addEventListener('click', (event) => {
   const card = event.target.closest('.card');
   if (card) window.dock.toggle(card.dataset.id);
 });
