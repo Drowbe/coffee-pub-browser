@@ -22,7 +22,8 @@ const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' 
 // Storage partition of the default session group ("Main"); other groups get
 // their own partition, see partitionFor().
 const PARTITION = 'persist:coffeepub';
-const PARK_STRIP = 40; // points of a collapsed window left visible at the display edge
+const DOCK_WIDTH = 36; // collapsed dock strip; parked windows keep this much on screen under it
+const DOCK_EXPANDED = 240;
 const BAR_HEIGHT = 28; // the app's own bar at the top of each window (cropped out in OBS)
 
 // Session group -> storage partition. "Main" keeps the original partition so
@@ -87,9 +88,14 @@ let controlWindow = null;
 /** @type {Tray | null} */
 let tray = null;
 let quitting = false;
-// Collapsed windows: id -> position to restore on expand.
+// Parked windows: id -> { x, y, thumb } to restore from the dock.
 const parked = new Map();
 let collapsed = false;
+/** @type {BrowserWindow | null} */
+let dockWindow = null;
+/** @type {Map<number, BrowserWindow>} display id -> cover strip */
+const coverStrips = new Map();
+let dockExpanded = false;
 
 // ---------------------------------------------------------------------------
 // OBS password (kept out of config.json, encrypted with the OS keychain)
@@ -181,6 +187,7 @@ function fullStatus() {
     config: configStore.get(),
     obs: { ...obs.status(), hasPassword: readObsPassword() !== '' },
     collapsed,
+    parkedIds: [...parked.keys()],
   };
 }
 
@@ -189,6 +196,7 @@ function broadcastStatus() {
     controlWindow.webContents.send('status', fullStatus());
   }
   refreshTrayMenu();
+  sendDockState();
 }
 
 function getView(id) {
@@ -466,6 +474,8 @@ function createViewWindow(view) {
   win.on('closed', () => {
     viewWindows.delete(view.id);
     pageViews.delete(view.id);
+    parked.delete(view.id);
+    collapsed = parked.size > 0;
     if (!wc.isDestroyed()) wc.close();
     broadcastStatus();
   });
@@ -596,38 +606,187 @@ function removeView(id) {
   return configStore.get();
 }
 
-// Slide every open window to the right edge of its display, leaving a thin
-// strip on screen so OBS keeps capturing it. Expand restores the positions.
-function collapseViews() {
-  parking = true;
-  for (const [id, win] of viewWindows) {
-    if (!isAlive(win) || parked.has(id)) continue;
-    const [x, y] = win.getPosition();
-    const area = screen.getDisplayMatching(win.getBounds()).workArea;
-    parked.set(id, { x, y });
-    win.setPosition(area.x + area.width - PARK_STRIP, y);
+// ---------------------------------------------------------------------------
+// Parking (the edge dock)
+// ---------------------------------------------------------------------------
+
+function dockDisplay() {
+  const wanted = configStore.get().arrangeDisplayId;
+  return screen.getAllDisplays().find((d) => d.id === wanted) || screen.getPrimaryDisplay();
+}
+
+// Where a window goes when parked: under the dock edge of its own display,
+// keeping DOCK_WIDTH points on screen so OBS keeps capturing it.
+function parkedPosition(win) {
+  const area = screen.getDisplayMatching(win.getBounds()).workArea;
+  const [w] = win.getContentSize();
+  const [, y] = win.getPosition();
+  return configStore.get().dock.side === 'left'
+    ? { x: area.x - w + DOCK_WIDTH, y }
+    : { x: area.x + area.width - DOCK_WIDTH, y };
+}
+
+async function parkView(id) {
+  const win = viewWindows.get(id);
+  if (!isAlive(win) || parked.has(id)) return;
+  let thumb = '';
+  const wc = pageOf(id);
+  if (wc) {
+    try {
+      const image = await wc.capturePage();
+      thumb = image.resize({ width: 220 }).toDataURL();
+    } catch (err) {
+      thumb = '';
+    }
   }
+  if (!isAlive(win)) return;
+  const [x, y] = win.getPosition();
+  parked.set(id, { x, y, thumb });
+  parking = true;
+  const target = parkedPosition(win);
+  win.setPosition(target.x, target.y);
   setTimeout(() => {
     parking = false;
   }, 300);
-  collapsed = true;
+  collapsed = parked.size > 0;
   buildMenu();
   broadcastStatus();
 }
 
-function expandViews() {
-  parking = true;
-  for (const [id, pos] of parked) {
-    const win = viewWindows.get(id);
-    if (isAlive(win)) win.setPosition(pos.x, pos.y);
+function restoreView(id) {
+  const entry = parked.get(id);
+  const win = viewWindows.get(id);
+  if (!entry) return;
+  parked.delete(id);
+  if (isAlive(win)) {
+    parking = true;
+    win.setPosition(entry.x, entry.y);
+    win.moveTop();
+    setTimeout(() => {
+      parking = false;
+    }, 300);
   }
-  setTimeout(() => {
-    parking = false;
-  }, 300);
-  parked.clear();
-  collapsed = false;
+  collapsed = parked.size > 0;
   buildMenu();
   broadcastStatus();
+}
+
+async function collapseViews() {
+  for (const id of viewWindows.keys()) await parkView(id);
+}
+
+function expandViews() {
+  for (const id of [...parked.keys()]) restoreView(id);
+}
+
+// --- Dock window and cover strips ---
+
+function dockBounds(display, expanded) {
+  const area = display.workArea;
+  const width = expanded ? DOCK_EXPANDED : DOCK_WIDTH;
+  const left = configStore.get().dock.side === 'left';
+  return { x: left ? area.x : area.x + area.width - width, y: area.y, width, height: area.height };
+}
+
+function edgeWindowOptions(extra) {
+  return {
+    frame: false,
+    roundedCorners: false,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#1a1410',
+    ...extra,
+  };
+}
+
+function dockState() {
+  return {
+    side: configStore.get().dock.side,
+    obsConnected: obs.connected,
+    windows: configStore.get().views.map((view) => {
+      const win = viewWindows.get(view.id);
+      const open = isAlive(win);
+      const entry = parked.get(view.id);
+      const [width, height] = open ? pageSize(win) : [view.width, view.height];
+      return { id: view.id, label: view.label, open, parked: Boolean(entry), thumb: entry ? entry.thumb : '', width, height };
+    }),
+  };
+}
+
+function sendDockState() {
+  if (isAlive(dockWindow) && !dockWindow.webContents.isDestroyed()) dockWindow.webContents.send('dock:state', dockState());
+}
+
+function layoutDock() {
+  if (!isAlive(dockWindow)) return;
+  const display = dockDisplay();
+  dockWindow.setBounds(dockBounds(display, dockExpanded), false);
+  // Cover strips on every other display hide the parked slivers there.
+  const wanted = new Set(screen.getAllDisplays().filter((d) => d.id !== display.id).map((d) => d.id));
+  for (const [id, strip] of coverStrips) {
+    if (!wanted.has(id)) {
+      if (isAlive(strip)) strip.destroy();
+      coverStrips.delete(id);
+    }
+  }
+  for (const d of screen.getAllDisplays()) {
+    if (d.id === display.id) continue;
+    let strip = coverStrips.get(d.id);
+    if (!isAlive(strip)) {
+      strip = new BrowserWindow(edgeWindowOptions({ focusable: false, ...dockBounds(d, false) }));
+      strip.setAlwaysOnTop(true, 'floating');
+      strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      strip.loadURL('data:text/html,<body style="margin:0;background:%231a1410"></body>');
+      coverStrips.set(d.id, strip);
+    }
+    strip.setBounds(dockBounds(d, false), false);
+    strip.showInactive();
+  }
+}
+
+function setupDock() {
+  const { enabled } = configStore.get().dock;
+  if (!enabled) {
+    if (isAlive(dockWindow)) dockWindow.destroy();
+    dockWindow = null;
+    for (const strip of coverStrips.values()) if (isAlive(strip)) strip.destroy();
+    coverStrips.clear();
+    return;
+  }
+  if (!isAlive(dockWindow)) {
+    dockWindow = new BrowserWindow(
+      edgeWindowOptions({
+        title: `${APP_NAME} Dock`,
+        ...dockBounds(dockDisplay(), false),
+        webPreferences: {
+          preload: path.join(__dirname, 'dock-preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          spellcheck: false,
+        },
+      }),
+    );
+    dockWindow.setAlwaysOnTop(true, 'floating');
+    dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    dockWindow.on('page-title-updated', (event) => event.preventDefault());
+    dockWindow.loadFile(path.join(__dirname, 'dock', 'index.html'));
+    dockWindow.webContents.on('did-finish-load', sendDockState);
+    dockWindow.once('ready-to-show', () => {
+      if (isAlive(dockWindow)) dockWindow.showInactive();
+    });
+    dockWindow.on('closed', () => {
+      dockWindow = null;
+    });
+  }
+  layoutDock();
 }
 
 // Start every window that has a URL. The per-window "start on launch" flag
@@ -750,7 +909,7 @@ function buildMenu() {
         { label: 'Close All', click: () => closeAllViews() },
         { type: 'separator' },
         {
-          label: collapsed ? 'Expand Windows' : 'Collapse Windows to Edge',
+          label: collapsed ? 'Restore Windows' : 'Park Windows Under the Dock',
           accelerator: 'CmdOrCtrl+Shift+C',
           click: () => (collapsed ? expandViews() : collapseViews()),
         },
@@ -808,7 +967,7 @@ function trayMenuTemplate() {
     { label: 'Stop All', click: () => closeAllViews() },
     { type: 'separator' },
     {
-      label: collapsed ? 'Expand Windows' : 'Collapse Windows to Edge',
+      label: collapsed ? 'Restore Windows' : 'Park Windows Under the Dock',
       enabled: viewWindows.size > 0,
       click: () => (collapsed ? expandViews() : collapseViews()),
     },
@@ -854,6 +1013,7 @@ function registerIpc() {
     const saved = configStore.save(next);
     saved.views.forEach(applyViewSettings);
     setupTray();
+    setupDock();
     buildMenu();
     broadcastStatus();
     return saved;
@@ -862,6 +1022,7 @@ function registerIpc() {
     const saved = configStore.save({});
     saved.views.forEach(applyViewSettings);
     setupTray();
+    setupDock();
     buildMenu();
     broadcastStatus();
     return saved;
@@ -870,6 +1031,27 @@ function registerIpc() {
   ipcMain.handle('views:remove', (_event, id) => removeView(id));
   ipcMain.handle('views:collapse', () => collapseViews());
   ipcMain.handle('views:expand', () => expandViews());
+  ipcMain.handle('views:park', (_event, id) => parkView(id));
+  ipcMain.handle('views:restore', (_event, id) => restoreView(id));
+
+  ipcMain.on('dock:hover', (_event, expanded) => {
+    dockExpanded = Boolean(expanded);
+    layoutDock();
+  });
+  ipcMain.on('dock:toggle', (_event, id) => {
+    if (!configStore.getView(id)) return;
+    if (parked.has(id)) restoreView(id);
+    else if (isAlive(viewWindows.get(id))) parkView(id);
+    else createViewWindow(getView(id));
+  });
+  ipcMain.on('dock:parkAll', () => collapseViews());
+  ipcMain.on('dock:restoreAll', () => expandViews());
+  ipcMain.on('dock:action', (_event, name) => {
+    if (name === 'startAll') openAllViews();
+    else if (name === 'stopAll') closeAllViews();
+    else if (name === 'sync') syncObs().catch(() => {});
+    else if (name === 'panel') createControlWindow();
+  });
 
   // --- OBS ---
   ipcMain.handle('obs:setSettings', async (_event, settings) => {
@@ -1118,13 +1300,18 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc();
     buildMenu();
     setupTray();
+    setupDock();
     createControlWindow();
     if (configStore.get().openOnLaunch) openLaunchViews();
     obs.start().catch(() => {});
 
-    screen.on('display-added', broadcastStatus);
-    screen.on('display-removed', broadcastStatus);
-    screen.on('display-metrics-changed', broadcastStatus);
+    const onDisplays = () => {
+      layoutDock();
+      broadcastStatus();
+    };
+    screen.on('display-added', onDisplays);
+    screen.on('display-removed', onDisplays);
+    screen.on('display-metrics-changed', onDisplays);
   });
 
   app.on('activate', () => createControlWindow());

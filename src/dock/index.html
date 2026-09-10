@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>Coffee Pub Dock</title>
+  <link rel="stylesheet" href="dock.css">
+</head>
+<body>
+  <div class="dock" id="dock">
+    <div class="strip" id="strip">
+      <span class="cup">&#9749;</span>
+      <span class="dots" id="dots"></span>
+    </div>
+    <div class="panel" id="panel">
+      <header class="panel-head">
+        <span class="title">Coffee Pub</span>
+        <span class="obs" id="obs" title="OBS connection"></span>
+      </header>
+      <div class="cards" id="cards"></div>
+      <div class="tools">
+        <button class="tool" data-action="parkAll" type="button">Park all</button>
+        <button class="tool" data-action="restoreAll" type="button">Restore all</button>
+        <button class="tool" data-action="startAll" type="button">Start all</button>
+        <button class="tool" data-action="stopAll" type="button">Stop all</button>
+        <button class="tool" data-action="sync" type="button" id="sync">Sync OBS</button>
+        <button class="tool" data-action="panel" type="button">Control panel</button>
+      </div>
+    </div>
+  </div>
+  <script src="dock.js"></script>
+</body>
+</html>

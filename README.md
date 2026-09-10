@@ -20,8 +20,11 @@ chat stream. You can run one to five windows; two is the default.
 - Named regions: mark part of a window, by drawing a rectangle on a snapshot or by naming a
   CSS selector, and the app creates a cropped OBS source for it and keeps the crop current.
 - Session groups: windows in the same group share a Foundry login, windows in different
-  groups do not. An optional menu bar icon, and a Collapse command that slides the windows to
-  the screen edge while OBS keeps capturing.
+  groups do not.
+- An edge dock: a slim strip at the left or right edge of the screen. Park windows under it
+  to get them out of the way while OBS keeps capturing them; hover it for a thumbnail of each
+  window, click to bring one back, plus Start, Stop and Sync shortcuts. An optional menu bar
+  icon offers the same commands.
 
 ## Requirements
 
@@ -80,9 +83,9 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
 ## Using it
 
 1. Launch **Coffee Pub Browser**. The control panel opens and, by default, the windows open
-   too. The panel has a **General** tab, an **OBS** tab, one tab per window, and a **+** tab
-   that adds a window (up to five). Each window tab has a **Remove window** button at the
-   bottom.
+   too. The panel has a **Session** tab (layout, the edge dock, OBS and login), one tab per
+   window with its regions, and a **+** tab that adds a window (up to five). Each window tab
+   has a **Remove window** button.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
    dedicated observer user works well). Windows in the same **Session group** share that
    login; give a window a different group name to give it its own cookies, for a different
@@ -100,12 +103,16 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    from the top-left corner of a display, wrapping to a new row when they no longer fit.
 6. New windows start with no URL and show a placeholder until you enter one. Each window is
    listed in OBS by its label, so give every window a different label.
-7. **Collapse** in the header, the menu bar icon, or Cmd+Shift+C slides every open window to
-   the right edge of its display, leaving a thin strip visible. OBS keeps capturing a window
-   that is partly on screen, whereas hiding or minimizing it stops the capture. **Expand**
-   puts the windows back.
-8. The optional **menu bar icon** (General tab) offers Start, Stop, Collapse, Sync OBS and
-   Quit, and can hide the Dock icon so the app behaves like a utility.
+7. The **edge dock** is a 36 pt strip at the right (or left) edge of the display chosen on the
+   Session tab. Hover it to expand it: one card per window with a thumbnail taken when it was
+   parked. Click a card to park that window under the dock or bring it back; **Park all** and
+   **Restore all** do it for every window, as does Cmd+Shift+C. A parked window keeps a sliver
+   on screen under the dock, so OBS keeps capturing it, whereas hiding or minimizing a window
+   stops the capture. Windows park on the display they are on; other displays get a matching
+   cover strip so nothing peeks out. Turn the dock off on the Session tab if you do not want
+   it.
+8. The optional **menu bar icon** (Session tab) offers Start, Stop, Park, Sync OBS and Quit,
+   and can hide the Dock icon so the app behaves like a utility.
 9. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
    it with **Cmd+0** or by clicking the Dock icon. Quit with **Cmd+Q**.
 
@@ -135,7 +142,7 @@ re-pick the window. The app fixes this by talking to OBS over its built-in WebSo
 
 1. In OBS, open **Tools > WebSocket Server Settings**, enable the server and set a password.
    Leave the port at 4455.
-2. On the control panel's **OBS** tab, enter the password, click **Save password**, then
+2. In the **OBS** section of the Session tab, enter the password, click **Save password**, then
    **Connect**. The tab shows CONNECTED once it has connected. Tick **Connect automatically**
    to connect at launch and reconnect whenever the link drops; **Disconnect** pauses that
    until you connect again.
@@ -191,7 +198,7 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | Shortcut | Action |
 | --- | --- |
 | Cmd+0 | Show the control panel |
-| Cmd+Shift+C | Collapse the windows to the screen edge, or expand them |
+| Cmd+Shift+C | Park all windows under the edge dock, or restore them |
 | Cmd+1 to Cmd+5 | Open (or focus) window 1 to 5 |
 | Cmd+Shift+1 to Cmd+Shift+5 | Reload window 1 to 5 |
 | Cmd+R | Reload the focused window |
@@ -206,7 +213,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 7,
+  "version": 8,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "autoConnect": false, "host": "127.0.0.1", "port": 4455 },
@@ -260,6 +267,7 @@ Settings are stored as JSON at
 | Field | Meaning |
 | --- | --- |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
+| `dock` | The edge dock: `enabled` and `side` (`right` or `left`). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
@@ -309,6 +317,7 @@ src/obs.js             OBS WebSocket bridge: keeps OBS sources pointed at the wi
 src/preload.js         Bridge between the control panel page and the main process
 src/bar-preload.js     Bridge between a window's bar page and the main process
 src/control/           Control panel page (HTML, CSS, JS)
+src/dock/              Edge dock page (HTML, CSS, JS); src/dock-preload.js bridges it
 src/bar/               The bar at the top of each window (HTML, CSS, JS); add per-window controls here
 build/icon.svg         App icon source; build/icon.png is generated from it
 ```

@@ -18,19 +18,18 @@
     <div class="topbar-actions">
       <button id="open-all" class="btn btn-primary" type="button">Start All</button>
       <button id="close-all" class="btn" type="button">Stop All</button>
-      <button id="collapse" class="btn" type="button" title="Slide the windows to the edge of the screen; OBS keeps capturing them">Collapse</button>
+      <button id="collapse" class="btn" type="button" title="Park the windows under the edge dock; OBS keeps capturing them">Park all</button>
     </div>
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="tab" data-tab="general" type="button">General</button>
-    <button class="tab" data-tab="obs" type="button">OBS <span class="dot" id="obs-dot"></span></button>
+    <button class="tab" data-tab="session" type="button">Session <span class="dot" id="obs-dot" title="OBS connection"></span></button>
     <span id="view-tabs" class="view-tabs"></span>
     <button class="tab tab-add" data-tab="add" type="button" title="Add a window">+</button>
   </nav>
 
   <main>
-    <section class="tab-panel" id="tab-general">
+    <section class="tab-panel" id="tab-session">
       <div class="card">
         <h2>Layout &amp; Startup</h2>
         <div class="row">
@@ -39,6 +38,21 @@
             <select id="arrange-display"></select>
           </label>
           <button id="arrange" class="btn" type="button" title="Windows go left to right from the top-left corner, wrapping to a new row when they no longer fit">Auto-arrange on display</button>
+          <span class="hint">Also where the edge dock lives.</span>
+        </div>
+        <div class="row">
+          <label class="check">
+            <input id="dock-enabled" type="checkbox">
+            <span>Show the edge dock</span>
+          </label>
+          <label class="field field-inline">
+            <span>Side</span>
+            <select id="dock-side">
+              <option value="right">Right edge</option>
+              <option value="left">Left edge</option>
+            </select>
+          </label>
+          <span class="hint">Hover the dock to see every window; click one to park it under the dock or bring it back. Parked windows stay captured by OBS.</span>
         </div>
         <div class="row checks-column">
           <label class="check">
@@ -47,7 +61,7 @@
           </label>
           <label class="check">
             <input id="menu-bar-icon" type="checkbox">
-            <span>Show a menu bar icon with Start, Stop, Collapse and Sync shortcuts</span>
+            <span>Show a menu bar icon with Start, Stop, Park and Sync shortcuts</span>
           </label>
           <label class="check check-indent">
             <input id="hide-dock-icon" type="checkbox">
@@ -62,9 +76,7 @@
           <button id="reset-config" class="btn" type="button">Reset to defaults</button>
         </div>
       </div>
-    </section>
 
-    <section class="tab-panel" id="tab-obs">
       <div class="card obs">
         <div class="view-head">
           <div class="view-head-left">

@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 7;
+const CONFIG_VERSION = 8;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -83,6 +83,19 @@ function sanitizeRegions(value) {
   return value.slice(0, REGION_LIMITS.maxRegions).map((r, i) => sanitizeRegion(r, i, taken));
 }
 
+function defaultDock() {
+  return { enabled: true, side: 'right' };
+}
+
+function sanitizeDock(input) {
+  const d = defaultDock();
+  const src = input && typeof input === 'object' ? input : {};
+  return {
+    enabled: src.enabled === undefined ? d.enabled : Boolean(src.enabled),
+    side: src.side === 'left' ? 'left' : 'right',
+  };
+}
+
 function defaultObs() {
   return { autoConnect: false, host: '127.0.0.1', port: 4455 };
 }
@@ -94,6 +107,7 @@ function defaultConfig() {
     menuBarIcon: true,
     hideDockIcon: false,
     arrangeDisplayId: null,
+    dock: defaultDock(),
     obs: defaultObs(),
     views: [defaultView(0), defaultView(1)],
   };
@@ -198,6 +212,7 @@ function sanitizeConfig(input) {
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
+    dock: sanitizeDock(src.dock),
     obs: sanitizeObs(src.obs),
     views,
   };

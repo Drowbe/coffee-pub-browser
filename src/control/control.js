@@ -21,6 +21,8 @@ const obsDotEl = $('obs-dot');
 const obsConnectEl = $('obs-connect');
 const obsAutoEl = $('obs-auto');
 const collapseEl = $('collapse');
+const dockEnabledEl = $('dock-enabled');
+const dockSideEl = $('dock-side');
 
 let config = null;
 let status = { views: [], displays: [], obs: { state: 'disconnected', inputs: [] }, collapsed: false };
@@ -28,7 +30,7 @@ let limits = { minViews: 1, maxViews: 5 };
 /** @type {Map<string, HTMLElement>} */
 const cards = new Map();
 let saveTimer = null;
-let activeTab = 'general';
+let activeTab = 'session';
 
 const NUMBER_FIELDS = new Set(['width', 'height']);
 const BOOL_FIELDS = new Set(['enabled', 'muted']);
@@ -64,21 +66,21 @@ function rememberTab(name) {
 
 function recallTab() {
   try {
-    return localStorage.getItem('activeTab') || 'general';
+    return localStorage.getItem('activeTab') || 'session';
   } catch (err) {
-    return 'general';
+    return 'session';
   }
 }
 
 function selectTab(name) {
-  if (name.startsWith('view:') && !config.views.some((v) => `view:${v.id}` === name)) name = 'general';
+  if (name === 'general' || name === 'obs') name = 'session';
+  if (name.startsWith('view:') && !config.views.some((v) => `view:${v.id}` === name)) name = 'session';
   activeTab = name;
   rememberTab(name);
   for (const tab of document.querySelectorAll('.tab')) {
     tab.classList.toggle('active', tab.dataset.tab === name);
   }
-  $('tab-general').hidden = name !== 'general';
-  $('tab-obs').hidden = name !== 'obs';
+  $('tab-session').hidden = name !== 'session';
   for (const [id, card] of cards) card.hidden = name !== `view:${id}`;
 }
 
@@ -162,6 +164,9 @@ function applyConfig(next) {
   config = next;
   openOnLaunchEl.checked = config.openOnLaunch;
   menuBarIconEl.checked = config.menuBarIcon;
+  dockEnabledEl.checked = config.dock.enabled;
+  dockSideEl.value = config.dock.side;
+  dockSideEl.disabled = !config.dock.enabled;
   renderSessionGroups();
   hideDockIconEl.checked = config.hideDockIcon;
   hideDockIconEl.disabled = !config.menuBarIcon;
@@ -263,7 +268,7 @@ function renderObs() {
 function renderStatus() {
   const o = status.obs || { state: 'disconnected', inputs: [] };
   const connected = o.state === 'connected';
-  collapseEl.textContent = status.collapsed ? 'Expand' : 'Collapse';
+  collapseEl.textContent = status.collapsed ? 'Restore all' : 'Park all';
   collapseEl.disabled = !status.views.some((v) => v.open);
 
   for (const view of config.views) {
@@ -573,7 +578,7 @@ async function onCardClick(event) {
         break;
       case 'remove-view':
         if (window.confirm(`Remove the "${view.label}" window and its settings?`)) {
-          activeTab = 'general';
+          activeTab = 'session';
           await api.removeView(id);
         }
         break;
@@ -656,6 +661,7 @@ async function flushSave() {
     config.openOnLaunch = openOnLaunchEl.checked;
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
+    config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right' };
     if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
     const saved = await api.saveConfig(config);
     setSaveState('All changes saved');
@@ -680,14 +686,14 @@ arrangeDisplayEl.addEventListener('change', () => {
   config.arrangeDisplayId = Number(arrangeDisplayEl.value);
   scheduleSave();
 });
-for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl]) el.addEventListener('change', scheduleSave);
+for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl]) el.addEventListener('change', scheduleSave);
 $('clear-session').addEventListener('click', () => api.clearSession());
 $('reveal-config').addEventListener('click', () => api.revealConfig());
 $('reset-config').addEventListener('click', async () => {
   if (!window.confirm('Reset URLs, sizes and positions to the defaults?')) return;
   const saved = await api.resetConfig();
   setSaveState('All changes saved');
-  activeTab = 'general';
+  activeTab = 'session';
   applyConfig(saved);
   renderStatus();
 });
