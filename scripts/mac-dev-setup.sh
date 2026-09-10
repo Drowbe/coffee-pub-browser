@@ -134,6 +134,11 @@ done
 if [[ -f "$DEV_DIR/coffee-pub-browser/package.json" ]]; then
   step "coffee-pub-browser: npm install"
   (cd "$DEV_DIR/coffee-pub-browser" && npm install --no-audit --no-fund)
+  # npm sometimes skips Electron's binary download; fetch it explicitly.
+  if [[ ! -f "$DEV_DIR/coffee-pub-browser/node_modules/electron/path.txt" ]]; then
+    step "coffee-pub-browser: downloading the Electron binary"
+    (cd "$DEV_DIR/coffee-pub-browser" && node node_modules/electron/install.js)
+  fi
   ok "ready: cd ~/Developer/coffee-pub-browser && npm start"
 fi
 
