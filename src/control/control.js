@@ -192,7 +192,8 @@ function renderLabelWarnings() {
 }
 
 function renderDisplays() {
-  const previous = arrangeDisplayEl.value;
+  // Prefer the current selection, then the remembered one from the config.
+  const previous = arrangeDisplayEl.value || (config && config.arrangeDisplayId !== null ? String(config.arrangeDisplayId) : '');
   arrangeDisplayEl.textContent = '';
   for (const display of status.displays) {
     const option = document.createElement('option');
@@ -555,6 +556,7 @@ async function flushSave() {
     config.showGrips = showGripsEl.checked;
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
+    if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
     const saved = await api.saveConfig(config);
     setSaveState('All changes saved');
     applyConfig(saved);
@@ -573,6 +575,10 @@ collapseEl.addEventListener('click', () => (status.collapsed ? api.expandViews()
 $('arrange').addEventListener('click', async () => {
   await flushSave();
   await api.arrangeViews(Number(arrangeDisplayEl.value));
+});
+arrangeDisplayEl.addEventListener('change', () => {
+  config.arrangeDisplayId = Number(arrangeDisplayEl.value);
+  scheduleSave();
 });
 for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl]) el.addEventListener('change', scheduleSave);
 showGripsEl.addEventListener('change', async () => {

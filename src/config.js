@@ -82,6 +82,7 @@ function defaultConfig() {
     showGrips: true,
     menuBarIcon: true,
     hideDockIcon: false,
+    arrangeDisplayId: null,
     obs: defaultObs(),
     views: [defaultView(0), defaultView(1)],
   };
@@ -185,6 +186,7 @@ function sanitizeConfig(input) {
     showGrips: src.showGrips === undefined ? defaults.showGrips : Boolean(src.showGrips),
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
+    arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
     obs: sanitizeObs(src.obs),
     views,
   };
