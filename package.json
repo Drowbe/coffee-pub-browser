@@ -11,11 +11,14 @@
     "node": ">=18"
   },
   "scripts": {
+    "build-info": "node scripts/write-build-info.js",
+    "prestart": "npm run build-info",
     "start": "electron .",
+    "predist": "npm run build-info",
     "dist": "electron-builder --mac",
-    "dist:arm64": "electron-builder --mac --arm64",
-    "dist:x64": "electron-builder --mac --x64",
-    "pack": "electron-builder --mac --dir",
+    "dist:arm64": "npm run build-info && electron-builder --mac --arm64",
+    "dist:x64": "npm run build-info && electron-builder --mac --x64",
+    "pack": "npm run build-info && electron-builder --mac --dir",
     "check": "node --check src/main.js && node --check src/config.js && node --check src/grips.js && node --check src/obs.js && node --check src/preload.js && node --check src/grip-preload.js && node --check src/control/control.js && node --check src/grip/grip.js"
   },
   "devDependencies": {

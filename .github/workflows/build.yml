@@ -35,7 +35,7 @@ jobs:
         run: npm run check
 
       - name: Build app (unsigned)
-        run: npx electron-builder --mac --publish never
+        run: npm run build-info && npx electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 

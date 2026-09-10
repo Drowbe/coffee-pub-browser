@@ -730,5 +730,7 @@ document.getElementById('picker-save').addEventListener('click', async () => {
   renderDisplays();
   renderObs();
   renderStatus();
-  document.getElementById('app-info').textContent = `v${info.version} - Electron ${info.electron} - Chromium ${info.chrome}`;
+  document.getElementById('app-info').textContent =
+    `${info.revision}${info.build && info.build.branch ? ` on ${info.build.branch}` : ''} - Electron ${info.electron} - Chromium ${info.chrome}`;
+  document.title = `Coffee Pub Browser - Control Panel - ${info.revision}`;
 })().catch((err) => setSaveState(`Failed to start: ${err.message}`, 'error'));

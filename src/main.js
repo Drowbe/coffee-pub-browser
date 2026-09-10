@@ -8,6 +8,18 @@ const { Grips } = require('./grips');
 const { ObsBridge } = require('./obs');
 
 const APP_NAME = 'Coffee Pub Browser';
+
+// Git revision recorded by scripts/write-build-info.js (absent in a bare checkout).
+function readBuildInfo() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, 'build-info.json'), 'utf8'));
+  } catch (err) {
+    return { commit: 'unknown', branch: '', dirty: false };
+  }
+}
+const BUILD_INFO = readBuildInfo();
+const APP_VERSION = require('../package.json').version;
+const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' : ''})`;
 // One shared, persistent session: logging into Foundry in either window logs in both.
 const PARTITION = 'persist:coffeepub';
 
@@ -483,7 +495,7 @@ function createControlWindow() {
     return controlWindow;
   }
   controlWindow = new BrowserWindow({
-    title: `${APP_NAME} - Control Panel`,
+    title: `${APP_NAME} - Control Panel - ${REVISION}`,
     width: 880,
     height: 760,
     minWidth: 720,
@@ -727,7 +739,9 @@ function registerIpc() {
   ipcMain.handle('app:info', () => ({
     name: APP_NAME,
     limits: LIMITS,
-    version: app.getVersion(),
+    version: APP_VERSION,
+    revision: REVISION,
+    build: BUILD_INFO,
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     configPath: configStore.filePath,
