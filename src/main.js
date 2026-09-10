@@ -1,9 +1,11 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog } = require('electron');
+const fs = require('fs');
+const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog, safeStorage } = require('electron');
 const { ConfigStore, LIMITS } = require('./config');
 const { Grips } = require('./grips');
+const { ObsBridge } = require('./obs');
 
 const APP_NAME = 'Coffee Pub Browser';
 // One shared, persistent session: logging into Foundry in either window logs in both.
@@ -50,6 +52,40 @@ const PLACEHOLDER_URL =
 /** @type {BrowserWindow | null} */
 let controlWindow = null;
 let quitting = false;
+
+// ---------------------------------------------------------------------------
+// OBS password (kept out of config.json, encrypted with the OS keychain)
+// ---------------------------------------------------------------------------
+
+const OBS_SECRET_PATH = path.join(app.getPath('userData'), 'obs-secret.bin');
+
+function readObsPassword() {
+  try {
+    const raw = fs.readFileSync(OBS_SECRET_PATH);
+    if (raw.length === 0) return '';
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(raw);
+    return raw.toString('utf8');
+  } catch (err) {
+    return '';
+  }
+}
+
+function writeObsPassword(password) {
+  const text = typeof password === 'string' ? password : '';
+  if (!text) {
+    fs.rmSync(OBS_SECRET_PATH, { force: true });
+    return;
+  }
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(text) : Buffer.from(text, 'utf8');
+  fs.writeFileSync(OBS_SECRET_PATH, data);
+}
+
+const obs = new ObsBridge({
+  getSettings: () => configStore.get().obs,
+  getPassword: readObsPassword,
+});
+obs.on('status', () => broadcastStatus());
+obs.on('connected', () => syncObs().catch(() => {}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,6 +139,7 @@ function fullStatus() {
     views: configStore.get().views.map(viewStatus),
     displays: screen.getAllDisplays().map(displaySummary),
     config: configStore.get(),
+    obs: { ...obs.status(), hasPassword: readObsPassword() !== '' },
   };
 }
 
@@ -124,6 +161,41 @@ function getView(id) {
 
 function windowTitle(view) {
   return `${APP_NAME} - ${view.label}`;
+}
+
+// The system window ID macOS assigns to an open view window (changes on
+// every launch), or null when the window is not open.
+function systemWindowId(win) {
+  if (!isAlive(win)) return null;
+  const match = /^window:(\d+):/.exec(win.getMediaSourceId() || '');
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+// Point every linked OBS source at the current windows. Newly detected
+// links are saved so they are re-pointed automatically from then on.
+let obsSyncTimer = null;
+async function syncObs() {
+  if (!obs.connected) return null;
+  const views = configStore.get().views.map((view) => ({
+    id: view.id,
+    title: windowTitle(view),
+    windowId: systemWindowId(viewWindows.get(view.id)),
+    sources: view.obsSources,
+  }));
+  const report = await obs.syncViews(views);
+  for (const { id, input } of report.detected) {
+    const view = configStore.getView(id);
+    if (view && !view.obsSources.includes(input)) {
+      configStore.updateView(id, { obsSources: [...view.obsSources, input] });
+    }
+  }
+  broadcastStatus();
+  return report;
+}
+
+function scheduleObsSync() {
+  clearTimeout(obsSyncTimer);
+  obsSyncTimer = setTimeout(() => syncObs().catch((err) => console.warn(`[obs] sync failed: ${err.message}`)), 800);
 }
 
 function createViewWindow(view) {
@@ -169,6 +241,7 @@ function createViewWindow(view) {
     if (!isAlive(win) || win.isVisible()) return;
     win.show();
     broadcastStatus();
+    scheduleObsSync();
   };
 
   // Foundry rewrites document.title constantly; keep our stable title so the
@@ -253,28 +326,25 @@ function reloadView(id) {
   if (isAlive(win)) win.webContents.reloadIgnoringCache();
 }
 
-function focusView(id) {
+// Centre the window on the display it is currently on and bring it forward.
+function resetView(id) {
+  const view = getView(id);
   const win = viewWindows.get(id);
-  if (isAlive(win)) {
-    win.show();
-    win.focus();
-  }
+  if (!isAlive(win)) return;
+  const area = screen.getDisplayMatching(win.getBounds()).workArea;
+  const x = Math.round(area.x + (area.width - view.width) / 2);
+  const y = Math.round(area.y + (area.height - view.height) / 2);
+  configStore.updateView(id, { x, y });
+  applyViewSettings(getView(id));
+  win.show();
+  win.focus();
+  win.moveTop();
+  broadcastStatus();
 }
 
 function resolveDisplay(displayId) {
   const all = screen.getAllDisplays();
   return all.find((d) => d.id === displayId) || screen.getPrimaryDisplay();
-}
-
-function centerView(id, displayId) {
-  const view = getView(id);
-  const display = resolveDisplay(displayId);
-  const area = display.workArea;
-  const x = Math.round(area.x + (area.width - view.width) / 2);
-  const y = Math.round(area.y + (area.height - view.height) / 2);
-  configStore.updateView(id, { x, y });
-  applyViewSettings(getView(id));
-  broadcastStatus();
 }
 
 // Lay the windows out left to right from the top-left of the display,
@@ -482,6 +552,51 @@ function registerIpc() {
   ipcMain.handle('grips:set', (_event, visible) => setShowGrips(visible));
   ipcMain.handle('views:setCount', (_event, count) => setViewCount(count));
 
+  // --- OBS ---
+  ipcMain.handle('obs:setSettings', async (_event, settings) => {
+    const current = configStore.get();
+    configStore.save({ ...current, obs: { ...current.obs, ...settings } });
+    await obs.start().catch(() => {});
+    return fullStatus().obs;
+  });
+  ipcMain.handle('obs:setPassword', async (_event, password) => {
+    writeObsPassword(password);
+    if (configStore.get().obs.enabled) await obs.start().catch(() => {});
+    return fullStatus().obs;
+  });
+  ipcMain.handle('obs:connect', async () => {
+    await obs.connect();
+    return fullStatus().obs;
+  });
+  ipcMain.handle('obs:sync', () => syncObs());
+  ipcMain.handle('obs:createSource', async (_event, id) => {
+    const view = getView(id);
+    const windowId = systemWindowId(viewWindows.get(id));
+    if (!windowId) throw new Error('Start the window first so OBS can capture it.');
+    let name = `Coffee Pub - ${view.label}`;
+    const taken = new Set(obs.status().inputs);
+    let n = 2;
+    while (taken.has(name)) name = `Coffee Pub - ${view.label} ${n++}`;
+    await obs.createInput(name, windowId);
+    configStore.updateView(id, { obsSources: [...view.obsSources, name] });
+    broadcastStatus();
+    return name;
+  });
+  ipcMain.handle('obs:linkSource', async (_event, id, inputName) => {
+    const view = getView(id);
+    if (typeof inputName !== 'string' || !inputName) return;
+    if (!view.obsSources.includes(inputName)) {
+      configStore.updateView(id, { obsSources: [...view.obsSources, inputName] });
+    }
+    await syncObs().catch(() => {});
+    broadcastStatus();
+  });
+  ipcMain.handle('obs:unlinkSource', (_event, id, inputName) => {
+    const view = getView(id);
+    configStore.updateView(id, { obsSources: view.obsSources.filter((n) => n !== inputName) });
+    broadcastStatus();
+  });
+
   ipcMain.on('grip:resize', (event, dw, dh) => {
     const id = grips.idFor(event.sender);
     if (id && Number.isInteger(dw) && Number.isInteger(dh)) grips.resize(id, dw, dh);
@@ -508,12 +623,11 @@ function registerIpc() {
   });
   ipcMain.handle('view:close', (_event, id) => closeView(id));
   ipcMain.handle('view:reload', (_event, id) => reloadView(id));
-  ipcMain.handle('view:focus', (_event, id) => focusView(id));
+  ipcMain.handle('view:reset', (_event, id) => resetView(id));
   ipcMain.handle('view:devtools', (_event, id) => {
     const win = viewWindows.get(id);
     if (isAlive(win)) win.webContents.toggleDevTools();
   });
-  ipcMain.handle('view:center', (_event, id, displayId) => centerView(id, displayId));
   ipcMain.handle('views:arrange', (_event, displayId) => arrangeViews(displayId));
   ipcMain.handle('views:openAll', () => openAllViews());
   ipcMain.handle('views:closeAll', () => closeAllViews());
@@ -586,6 +700,7 @@ if (!app.requestSingleInstanceLock()) {
     buildMenu();
     createControlWindow();
     if (configStore.get().openOnLaunch) openAllViews();
+    obs.start().catch(() => {});
 
     screen.on('display-added', broadcastStatus);
     screen.on('display-removed', broadcastStatus);
@@ -595,6 +710,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('activate', () => createControlWindow());
   app.on('before-quit', () => {
     quitting = true;
+    obs.stop().catch(() => {});
   });
   // Standard macOS behaviour: the app stays alive in the Dock with no windows.
   app.on('window-all-closed', () => {

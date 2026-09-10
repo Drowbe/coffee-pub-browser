@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 
 const LIMITS = {
   minSize: 100,
@@ -34,7 +34,12 @@ function defaultView(index) {
     y: null,
     muted: seed ? seed.muted : true,
     enabled: true,
+    obsSources: [],
   };
+}
+
+function defaultObs() {
+  return { enabled: false, host: '127.0.0.1', port: 4455 };
 }
 
 function defaultConfig() {
@@ -42,6 +47,7 @@ function defaultConfig() {
     version: CONFIG_VERSION,
     openOnLaunch: true,
     showGrips: true,
+    obs: defaultObs(),
     views: [defaultView(0), defaultView(1)],
   };
 }
@@ -88,6 +94,33 @@ function sanitizeView(input, index) {
     y,
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
+    obsSources: sanitizeSources(src.obsSources),
+  };
+}
+
+// Names of OBS inputs that should follow this window.
+function sanitizeSources(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const v of value) {
+    if (typeof v !== 'string') continue;
+    const name = v.trim().slice(0, 200);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+function sanitizeObs(input) {
+  const d = defaultObs();
+  const src = input && typeof input === 'object' ? input : {};
+  const host = typeof src.host === 'string' && src.host.trim() ? src.host.trim().slice(0, 200) : d.host;
+  return {
+    enabled: Boolean(src.enabled),
+    host,
+    port: clamp(toInt(src.port, d.port), 1, 65535),
   };
 }
 
@@ -113,6 +146,7 @@ function sanitizeConfig(input) {
     version: CONFIG_VERSION,
     openOnLaunch: src.openOnLaunch === undefined ? defaults.openOnLaunch : Boolean(src.openOnLaunch),
     showGrips: src.showGrips === undefined ? defaults.showGrips : Boolean(src.showGrips),
+    obs: sanitizeObs(src.obs),
     views,
   };
 }

@@ -16,8 +16,8 @@
       </div>
     </div>
     <div class="topbar-actions">
-      <button id="open-all" class="btn btn-primary" type="button">Open All</button>
-      <button id="close-all" class="btn" type="button">Close All</button>
+      <button id="open-all" class="btn btn-primary" type="button">Start All</button>
+      <button id="close-all" class="btn" type="button">Stop All</button>
     </div>
   </header>
 
@@ -44,7 +44,7 @@
       <div class="row checks-column">
         <label class="check">
           <input id="open-on-launch" type="checkbox">
-          <span>Open the windows when the app launches</span>
+          <span>Start the windows when the app launches</span>
         </label>
         <label class="check">
           <input id="show-grips" type="checkbox">
@@ -61,6 +61,43 @@
       </div>
     </section>
 
+    <section class="card obs">
+      <div class="view-head">
+        <div class="view-head-left">
+          <h2>OBS</h2>
+          <span class="tag" id="obs-tag" hidden>CONNECTED</span>
+        </div>
+        <div class="view-actions">
+          <button id="obs-connect" class="btn" type="button">Connect now</button>
+          <button id="obs-sync" class="btn" type="button">Sync sources</button>
+        </div>
+      </div>
+      <p class="hint">
+        Keeps your OBS window-capture sources pointed at these windows after every launch, so you never re-pick a window.
+        In OBS: Tools &gt; WebSocket Server Settings, enable the server and set a password.
+      </p>
+      <div class="row">
+        <label class="check">
+          <input id="obs-enabled" type="checkbox">
+          <span>Connect to OBS</span>
+        </label>
+        <label class="field field-inline">
+          <span>Host</span>
+          <input id="obs-host" type="text" size="14" spellcheck="false">
+        </label>
+        <label class="field field-inline">
+          <span>Port</span>
+          <input id="obs-port" type="number" min="1" max="65535" step="1" size="6">
+        </label>
+        <label class="field field-inline">
+          <span>Password</span>
+          <input id="obs-password" type="password" size="16" autocomplete="off" placeholder="not set">
+        </label>
+        <button id="obs-save-password" class="btn" type="button">Save password</button>
+      </div>
+      <p class="hint" id="obs-status">Not connected.</p>
+    </section>
+
     <section id="views" class="views"></section>
   </main>
 
@@ -74,15 +111,13 @@
       <header class="view-head">
         <div class="view-head-left">
           <h2 class="view-title"></h2>
-          <span class="badge badge-closed" data-role="badge">Closed</span>
+          <span class="tag" data-role="tag" hidden>ACTIVE</span>
         </div>
         <div class="view-actions">
-          <button class="btn btn-primary" data-action="open" type="button">Open</button>
-          <button class="btn" data-action="focus" type="button">Bring to front</button>
+          <button class="btn btn-primary" data-action="toggle" type="button">Start</button>
           <button class="btn" data-action="reload" type="button">Reload</button>
-          <button class="btn" data-action="center" type="button">Center on display</button>
+          <button class="btn" data-action="reset" type="button" title="Center on its display and bring to front">Reset window</button>
           <button class="btn" data-action="devtools" type="button">DevTools</button>
-          <button class="btn btn-danger" data-action="close" type="button">Close</button>
         </div>
       </header>
 
@@ -104,28 +139,29 @@
           <span>Height (px)</span>
           <input data-field="height" type="number" min="100" max="7680" step="1">
         </label>
-        <label class="field">
-          <span>X</span>
-          <input data-field="x" type="number" step="1" placeholder="auto">
-        </label>
-        <label class="field">
-          <span>Y</span>
-          <input data-field="y" type="number" step="1" placeholder="auto">
-        </label>
       </div>
 
       <div class="checks">
-        <label class="check"><input data-field="enabled" type="checkbox"><span>Open on launch</span></label>
+        <label class="check"><input data-field="enabled" type="checkbox"><span>Start on launch</span></label>
         <label class="check"><input data-field="muted" type="checkbox"><span>Mute audio</span></label>
       </div>
 
-      <dl class="status">
-        <div><dt>OBS window name</dt><dd data-status="title">-</dd></div>
-        <div><dt>Window size</dt><dd data-status="size">-</dd></div>
-        <div><dt>Captured pixels</dt><dd data-status="capture">-</dd></div>
-        <div><dt>Position</dt><dd data-status="position">-</dd></div>
-        <div><dt>Current URL</dt><dd data-status="url">-</dd></div>
-      </dl>
+      <div class="details">
+        <div class="details-row">
+          <span class="details-key">OBS window name</span>
+          <span class="details-value" data-status="title">-</span>
+        </div>
+        <div class="details-row" data-role="obs-row">
+          <span class="details-key">OBS sources</span>
+          <span class="details-value sources">
+            <span class="chips" data-role="chips"></span>
+            <select data-role="link-select" class="link-select">
+              <option value="">Link existing source...</option>
+            </select>
+            <button class="btn btn-small" data-action="create-source" type="button">Create in OBS</button>
+          </span>
+        </div>
+      </div>
     </article>
   </template>
 

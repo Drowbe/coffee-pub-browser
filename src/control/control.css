@@ -142,27 +142,23 @@ main {
   color: var(--text);
 }
 
-.badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.badge-open {
-  color: #0f1a0f;
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 3px;
   background: var(--ok);
-  border-color: var(--ok);
+  color: #0f1a0f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.badge-loading {
-  color: #1a1206;
+.tag.tag-loading {
   background: var(--accent);
-  border-color: var(--accent);
+  color: #1a1206;
 }
 
 .grid {
@@ -337,38 +333,85 @@ select:focus {
   color: #fff;
 }
 
-.status {
-  margin: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 16px;
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
-.status > div {
+.details-row {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.status > div:first-child,
-.status > div:last-child {
-  grid-column: span 2;
-}
-
-.status dt {
+.details-key {
   color: var(--text-dim);
   white-space: nowrap;
+  min-width: 120px;
 }
 
-.status dd {
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.details-value {
   -webkit-user-select: text;
   user-select: text;
+  min-width: 0;
+}
+
+.details-value.sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-input);
+  font-size: 12px;
+}
+
+.chip.chip-missing {
+  border-color: var(--danger);
+  color: #f0a597;
+}
+
+.chip button {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.chip button:hover {
+  color: var(--text);
+}
+
+.link-select {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .hint {
@@ -390,5 +433,9 @@ select:focus {
 }
 
 #save-state.error {
+  color: #f0a597;
+}
+
+.hint-error {
   color: #f0a597;
 }

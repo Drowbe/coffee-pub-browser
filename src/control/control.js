@@ -12,15 +12,21 @@ const retinaHintEl = document.getElementById('retina-hint');
 const countValueEl = document.getElementById('count-value');
 const countDownEl = document.getElementById('count-down');
 const countUpEl = document.getElementById('count-up');
+const obsEnabledEl = document.getElementById('obs-enabled');
+const obsHostEl = document.getElementById('obs-host');
+const obsPortEl = document.getElementById('obs-port');
+const obsPasswordEl = document.getElementById('obs-password');
+const obsStatusEl = document.getElementById('obs-status');
+const obsTagEl = document.getElementById('obs-tag');
 
 let config = null;
-let status = { views: [], displays: [] };
+let status = { views: [], displays: [], obs: { state: 'disabled', inputs: [] } };
 let limits = { minViews: 1, maxViews: 5 };
 /** @type {Map<string, HTMLElement>} */
 const cards = new Map();
 let saveTimer = null;
 
-const NUMBER_FIELDS = new Set(['width', 'height', 'x', 'y']);
+const NUMBER_FIELDS = new Set(['width', 'height']);
 const BOOL_FIELDS = new Set(['enabled', 'muted']);
 
 function setSaveState(text, cls = '') {
@@ -30,6 +36,10 @@ function setSaveState(text, cls = '') {
 
 function isDirty() {
   return saveStateEl.classList.contains('dirty');
+}
+
+function isEditing(el) {
+  return el.contains(document.activeElement);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +57,7 @@ function renderViewCards() {
     card.addEventListener('input', onFieldInput);
     card.addEventListener('change', onFieldInput);
     card.addEventListener('click', onCardClick);
+    card.querySelector('[data-role="link-select"]').addEventListener('change', onLinkSelect);
     viewsEl.appendChild(card);
   }
   renderLabelWarnings();
@@ -75,13 +86,16 @@ function applyConfig(next) {
   countValueEl.value = String(config.views.length);
   countDownEl.disabled = config.views.length <= limits.minViews;
   countUpEl.disabled = config.views.length >= limits.maxViews;
+  obsEnabledEl.checked = config.obs.enabled;
+  if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
+  if (document.activeElement !== obsPortEl) obsPortEl.value = String(config.obs.port);
   if (!sameViews) {
     renderViewCards();
     return;
   }
   for (const view of config.views) {
     const card = cards.get(view.id);
-    if (card && !card.contains(document.activeElement)) fillCard(card, view);
+    if (card && !isEditing(card)) fillCard(card, view);
   }
   renderLabelWarnings();
 }
@@ -115,52 +129,114 @@ function renderDisplays() {
   const hiDpi = status.displays.filter((d) => d.scaleFactor > 1);
   if (hiDpi.length) {
     retinaHintEl.textContent =
-      `Retina note: on a ${hiDpi[0].scaleFactor}x display OBS captures ${hiDpi[0].scaleFactor}x the window size in pixels ` +
-      '(see "Captured pixels" on each window). Either scale the source in OBS or halve the width/height here.';
+      `Retina note: on a ${hiDpi[0].scaleFactor}x display OBS captures ${hiDpi[0].scaleFactor}x the window size in pixels. ` +
+      'Either scale the source in OBS or halve the width/height here.';
   } else {
     retinaHintEl.textContent = 'Window size and captured pixel size match on this display.';
   }
 }
 
+function renderObs() {
+  const o = status.obs || { state: 'disabled', inputs: [] };
+  obsTagEl.hidden = o.state !== 'connected';
+  const labels = {
+    disabled: 'OBS connection is off.',
+    disconnected: o.message || 'Not connected.',
+    connecting: o.message || 'Connecting...',
+    connected: o.message || 'Connected.',
+    error: o.message || 'Connection failed.',
+  };
+  let text = labels[o.state] || '';
+  if (o.state === 'connected') {
+    text += ` ${o.inputs.length} window-capture source${o.inputs.length === 1 ? '' : 's'} found.`;
+    if (o.lastSync) {
+      const bits = [];
+      if (o.lastSync.pointed.length) bits.push(`re-pointed ${o.lastSync.pointed.join(', ')}`);
+      if (o.lastSync.detected.length) bits.push(`linked ${o.lastSync.detected.map((d) => d.input).join(', ')}`);
+      if (o.lastSync.missing.length) bits.push(`missing in OBS: ${o.lastSync.missing.join(', ')}`);
+      text += bits.length ? ` Last sync ${bits.join('; ')}.` : ' Last sync: everything already in place.';
+    }
+  }
+  obsStatusEl.textContent = text;
+  obsStatusEl.classList.toggle('hint-error', o.state === 'error');
+  obsPasswordEl.placeholder = o.hasPassword ? 'saved' : 'not set';
+  document.getElementById('obs-sync').disabled = o.state !== 'connected';
+}
+
 function renderStatus() {
+  const o = status.obs || { state: 'disabled', inputs: [] };
+  const connected = o.state === 'connected';
   for (const view of config.views) {
     const card = cards.get(view.id);
     if (!card) continue;
     const s = status.views.find((v) => v.id === view.id) || { open: false };
-    const badge = card.querySelector('[data-role="badge"]');
-    if (!s.open) {
-      badge.textContent = 'Closed';
-      badge.className = 'badge badge-closed';
-    } else if (s.loading) {
-      badge.textContent = 'Loading';
-      badge.className = 'badge badge-loading';
-    } else {
-      badge.textContent = 'Open';
-      badge.className = 'badge badge-open';
+
+    const tag = card.querySelector('[data-role="tag"]');
+    tag.hidden = !s.open;
+    tag.textContent = s.open && s.loading ? 'LOADING' : 'ACTIVE';
+    tag.classList.toggle('tag-loading', Boolean(s.open && s.loading));
+
+    const toggle = card.querySelector('[data-action="toggle"]');
+    toggle.textContent = s.open ? 'Stop' : 'Start';
+    toggle.classList.toggle('btn-primary', !s.open);
+    toggle.classList.toggle('btn-danger', s.open);
+    toggle.disabled = !s.open && !view.url;
+    toggle.title = !s.open && !view.url ? 'Enter a URL first' : '';
+    card.querySelector('[data-action="reload"]').disabled = !s.open;
+    card.querySelector('[data-action="reset"]').disabled = !s.open;
+    card.querySelector('[data-action="devtools"]').disabled = !s.open;
+
+    const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
+    const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
+    card.querySelector('[data-status="title"]').textContent = `Coffee Pub Browser - ${view.label}  ·  ${size}${captured}`;
+
+    // OBS sources linked to this window
+    const chips = card.querySelector('[data-role="chips"]');
+    chips.textContent = '';
+    for (const name of view.obsSources) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const missing = connected && !o.inputs.includes(name);
+      if (missing) {
+        chip.classList.add('chip-missing');
+        chip.title = 'Not found in OBS';
+      }
+      chip.append(name);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Unlink';
+      remove.dataset.unlink = name;
+      chip.appendChild(remove);
+      chips.appendChild(chip);
     }
-
-    const set = (name, value) => {
-      card.querySelector(`[data-status="${name}"]`).textContent = value;
-    };
-    set('title', s.open ? s.title : `Coffee Pub Browser - ${view.label}`);
-    set('size', s.open ? `${s.width} x ${s.height}` : `${view.width} x ${view.height} (when opened)`);
-    set(
-      'capture',
-      s.open
-        ? `${s.captureWidth} x ${s.captureHeight}${s.scaleFactor !== 1 ? ` (${s.scaleFactor}x on ${s.displayLabel})` : ''}`
-        : '-',
-    );
-    set('position', s.open ? `${s.x}, ${s.y}` : view.x === null ? 'auto' : `${view.x}, ${view.y}`);
-    set('url', s.open && s.url && !s.url.startsWith('data:') ? s.url : s.open ? 'no URL set' : '-');
-
-    const toggle = (action, enabled) => {
-      card.querySelector(`[data-action="${action}"]`).disabled = !enabled;
-    };
-    toggle('open', !s.open);
-    toggle('focus', s.open);
-    toggle('reload', s.open);
-    toggle('devtools', s.open);
-    toggle('close', s.open);
+    if (!view.obsSources.length) {
+      const none = document.createElement('span');
+      none.className = 'hint';
+      none.textContent = connected ? 'none linked' : 'connect to OBS to link sources';
+      chips.appendChild(none);
+    }
+    const select = card.querySelector('[data-role="link-select"]');
+    if (!isEditing(select)) {
+      select.textContent = '';
+      const first = document.createElement('option');
+      first.value = '';
+      first.textContent = 'Link existing source...';
+      select.appendChild(first);
+      const linkedElsewhere = new Set(config.views.flatMap((v) => v.obsSources));
+      for (const name of o.inputs) {
+        if (linkedElsewhere.has(name)) continue;
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      }
+      select.hidden = !connected || select.options.length === 1;
+    }
+    const create = card.querySelector('[data-action="create-source"]');
+    create.hidden = !connected;
+    create.disabled = !s.open;
+    create.title = s.open ? '' : 'Start the window first';
   }
 }
 
@@ -184,6 +260,7 @@ function readCard(card, view) {
 }
 
 function onFieldInput(event) {
+  if (!event.target.matches('[data-field]')) return;
   const card = event.currentTarget;
   const view = config.views.find((v) => v.id === card.dataset.viewId);
   if (!view) return;
@@ -196,32 +273,50 @@ function onFieldInput(event) {
 }
 
 async function onCardClick(event) {
+  const id = event.currentTarget.dataset.viewId;
+  const unlink = event.target.closest('[data-unlink]');
+  if (unlink) {
+    await api.obsUnlinkSource(id, unlink.dataset.unlink);
+    return;
+  }
   const button = event.target.closest('[data-action]');
   if (!button) return;
-  const id = event.currentTarget.dataset.viewId;
   await flushSave();
-  switch (button.dataset.action) {
-    case 'open':
-      await api.openView(id);
-      break;
-    case 'close':
-      await api.closeView(id);
-      break;
-    case 'reload':
-      await api.reloadView(id);
-      break;
-    case 'focus':
-      await api.focusView(id);
-      break;
-    case 'devtools':
-      await api.devToolsView(id);
-      break;
-    case 'center':
-      await api.centerView(id, Number(arrangeDisplayEl.value));
-      break;
-    default:
-      break;
+  const s = status.views.find((v) => v.id === id) || { open: false };
+  try {
+    switch (button.dataset.action) {
+      case 'toggle':
+        if (s.open) await api.closeView(id);
+        else await api.openView(id);
+        break;
+      case 'reload':
+        await api.reloadView(id);
+        break;
+      case 'reset':
+        await api.resetView(id);
+        break;
+      case 'devtools':
+        await api.devToolsView(id);
+        break;
+      case 'create-source':
+        await api.obsCreateSource(id);
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    setSaveState(err.message.replace(/^.*Error: /, ''), 'error');
   }
+}
+
+async function onLinkSelect(event) {
+  const select = event.currentTarget;
+  const name = select.value;
+  if (!name) return;
+  const id = select.closest('.view').dataset.viewId;
+  select.value = '';
+  select.blur();
+  await api.obsLinkSource(id, name);
 }
 
 function scheduleSave() {
@@ -286,6 +381,47 @@ document.getElementById('reset-config').addEventListener('click', async () => {
   renderStatus();
 });
 
+// --- OBS ---
+async function saveObsSettings() {
+  await flushSave();
+  status.obs = await api.obsSetSettings({
+    enabled: obsEnabledEl.checked,
+    host: obsHostEl.value.trim() || '127.0.0.1',
+    port: Number(obsPortEl.value) || 4455,
+  });
+  renderObs();
+}
+obsEnabledEl.addEventListener('change', saveObsSettings);
+obsHostEl.addEventListener('change', saveObsSettings);
+obsPortEl.addEventListener('change', saveObsSettings);
+document.getElementById('obs-save-password').addEventListener('click', async () => {
+  status.obs = await api.obsSetPassword(obsPasswordEl.value);
+  obsPasswordEl.value = '';
+  renderObs();
+});
+obsPasswordEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') document.getElementById('obs-save-password').click();
+});
+document.getElementById('obs-connect').addEventListener('click', async () => {
+  if (!obsEnabledEl.checked) {
+    obsEnabledEl.checked = true;
+    await saveObsSettings();
+  }
+  try {
+    status.obs = await api.obsConnect();
+  } catch (err) {
+    // Status text carries the reason.
+  }
+  renderObs();
+});
+document.getElementById('obs-sync').addEventListener('click', async () => {
+  try {
+    await api.obsSync();
+  } catch (err) {
+    setSaveState(err.message.replace(/^.*Error: /, ''), 'error');
+  }
+});
+
 // Blur commits fields immediately so a shortcut right after typing uses the new value.
 document.addEventListener('focusout', (event) => {
   if (event.target && event.target.matches('[data-field]') && saveTimer) flushSave();
@@ -294,9 +430,10 @@ document.addEventListener('focusout', (event) => {
 api.onStatus((next) => {
   status = next;
   // Config changes made outside the panel (grip drags, arrow-key resizes,
-  // menu toggles) arrive here. Skip while the user has unsaved edits.
+  // menu toggles, OBS links) arrive here. Skip while the user has unsaved edits.
   if (next.config && !isDirty()) applyConfig(next.config);
   renderDisplays();
+  renderObs();
   renderStatus();
 });
 
@@ -310,6 +447,7 @@ api.onStatus((next) => {
   status = st;
   applyConfig(cfg);
   renderDisplays();
+  renderObs();
   renderStatus();
   document.getElementById('app-info').textContent = `v${info.version} - Electron ${info.electron} - Chromium ${info.chrome}`;
 })().catch((err) => setSaveState(`Failed to start: ${err.message}`, 'error'));
