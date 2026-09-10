@@ -13,6 +13,8 @@ chat stream.
   source stays smooth.
 - A control panel to set URL, size, position, zoom and audio mute per window, with
   auto-arrange and a live readout of the pixel size OBS will capture.
+- A grip bar docked above each window for dragging it around. The grip is a separate window,
+  so it never shows up in the OBS capture.
 
 ## Requirements
 
@@ -76,9 +78,13 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    dedicated observer user works well). The Stream window shares the login.
 3. In the control panel, set each window's **Width** and **Height** to the exact size you
    want. Changes apply live to open windows and are saved automatically.
-4. Use **Auto-arrange on display** to put the Game window at the top-left of a display with
-   the Stream window beside it, or set **X** / **Y** by hand. The windows have no title bar,
-   so they are positioned from the panel rather than dragged.
+4. Move a window by dragging the **grip bar** docked above it. Click a grip and use the arrow
+   keys to nudge its window by 1 px (Shift+arrow for 10 px); the grip shows the current
+   position. Double-click a grip to focus its window. **Cmd+G** hides or shows all grips.
+   You can also use **Auto-arrange on display** to put the Game window at the top-left of a
+   display with the Stream window beside it, or set **X** / **Y** by hand in the panel.
+   When a window is flush with the top of the display, its grip overlaps the window's top edge
+   instead; that only affects what you see on the desktop, not the OBS capture.
 5. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
    it with **Cmd+0** or by clicking the Dock icon. Quit with **Cmd+Q**.
 
@@ -107,6 +113,7 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | Shortcut | Action |
 | --- | --- |
 | Cmd+0 | Show the control panel |
+| Cmd+G | Show or hide the grip bars |
 | Cmd+1 / Cmd+2 | Open (or focus) the Game / Stream window |
 | Cmd+Shift+1 / Cmd+Shift+2 | Reload the Game / Stream window |
 | Cmd+R | Reload the focused window |
@@ -123,6 +130,7 @@ Settings are stored as JSON at
 {
   "version": 1,
   "openOnLaunch": true,
+  "showGrips": true,
   "views": [
     {
       "id": "game",
@@ -154,6 +162,7 @@ Settings are stored as JSON at
 
 | Field | Meaning |
 | --- | --- |
+| `showGrips` | Show the grip bars above the windows. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`. |
 | `width`, `height` | Content size in points (100 to 7680). |
@@ -177,8 +186,11 @@ Pushing a tag that starts with `v` from your machine triggers the same release b
 ```
 src/main.js            Electron main process: windows, menu, IPC, permissions
 src/config.js          Config load/save/validation
+src/grips.js           Grip bar windows that move their view when dragged
 src/preload.js         Bridge between the control panel page and the main process
+src/grip-preload.js    Bridge between a grip page and the main process
 src/control/           Control panel page (HTML, CSS, JS)
+src/grip/              Grip bar page (HTML, CSS, JS); add future per-window controls here
 build/icon.svg         App icon source; build/icon.png is generated from it
 ```
 

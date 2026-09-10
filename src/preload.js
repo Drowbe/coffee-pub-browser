@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('coffeePub', {
   devToolsView: (id) => ipcRenderer.invoke('view:devtools', id),
   centerView: (id, displayId) => ipcRenderer.invoke('view:center', id, displayId),
   arrangeViews: (displayId) => ipcRenderer.invoke('views:arrange', displayId),
+  setShowGrips: (visible) => ipcRenderer.invoke('grips:set', visible),
   openAll: () => ipcRenderer.invoke('views:openAll'),
   closeAll: () => ipcRenderer.invoke('views:closeAll'),
   clearSession: () => ipcRenderer.invoke('session:clear'),

@@ -3,6 +3,7 @@
 const path = require('path');
 const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog } = require('electron');
 const { ConfigStore } = require('./config');
+const { Grips } = require('./grips');
 
 const APP_NAME = 'Coffee Pub Browser';
 // One shared, persistent session: logging into Foundry in either window logs in both.
@@ -23,6 +24,13 @@ const configStore = new ConfigStore(path.join(app.getPath('userData'), 'config.j
 
 /** @type {Map<string, BrowserWindow>} */
 const viewWindows = new Map();
+const grips = new Grips({
+  isEnabled: () => configStore.get().showGrips,
+  onViewMoved: (id, x, y) => {
+    configStore.updateView(id, { x, y });
+    broadcastStatus();
+  },
+});
 /** @type {BrowserWindow | null} */
 let controlWindow = null;
 let quitting = false;
@@ -79,6 +87,7 @@ function fullStatus() {
   return {
     views: configStore.get().views.map(viewStatus),
     displays: screen.getAllDisplays().map(displaySummary),
+    showGrips: configStore.get().showGrips,
   };
 }
 
@@ -142,6 +151,12 @@ function createViewWindow(view) {
   const win = new BrowserWindow(options);
   viewWindows.set(view.id, win);
 
+  const showView = () => {
+    if (!isAlive(win) || win.isVisible()) return;
+    win.show();
+    broadcastStatus();
+  };
+
   // Foundry rewrites document.title constantly; keep our stable title so the
   // window is easy to find in the OBS "Window Capture" list.
   win.on('page-title-updated', (event) => event.preventDefault());
@@ -161,7 +176,9 @@ function createViewWindow(view) {
   win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3 is ERR_ABORTED, e.g. a redirect.
     console.warn(`[${view.id}] Failed to load ${url}: ${description} (${code})`);
-    broadcastStatus();
+    // Still show the window so the Chromium error page is visible and the
+    // window can be reloaded once the server is reachable.
+    showView();
   });
   win.webContents.on('render-process-gone', (_event, details) => {
     console.warn(`[${view.id}] Renderer gone (${details.reason}), reloading.`);
@@ -181,13 +198,12 @@ function createViewWindow(view) {
     broadcastStatus();
   });
 
-  win.once('ready-to-show', () => {
-    if (!isAlive(win)) return;
-    win.show();
-    broadcastStatus();
-  });
+  win.once('ready-to-show', showView);
+  // Safety net: never leave a window invisible if the page stalls.
+  setTimeout(showView, 8000);
 
   win.loadURL(view.url);
+  grips.attach(view.id, win, view.label);
   broadcastStatus();
   return win;
 }
@@ -197,6 +213,7 @@ function applyViewSettings(view) {
   const win = viewWindows.get(view.id);
   if (!isAlive(win)) return;
   if (win.getTitle() !== windowTitle(view)) win.setTitle(windowTitle(view));
+  grips.setLabel(view.id, view.label);
   const [w, h] = win.getContentSize();
   if (w !== view.width || h !== view.height) {
     win.setContentSize(view.width, view.height);
@@ -262,6 +279,13 @@ function arrangeViews(displayId) {
     configStore.updateView(stream.id, { x: area.x, y: area.y + game.height });
   }
   configStore.get().views.forEach(applyViewSettings);
+  broadcastStatus();
+}
+
+function setShowGrips(visible) {
+  configStore.save({ ...configStore.get(), showGrips: Boolean(visible) });
+  grips.setVisible(Boolean(visible));
+  buildMenu();
   broadcastStatus();
 }
 
@@ -376,6 +400,14 @@ function buildMenu() {
         { label: 'Close All', click: () => closeAllViews() },
         { type: 'separator' },
         {
+          label: 'Show Grip Bars',
+          type: 'checkbox',
+          checked: configStore.get().showGrips,
+          accelerator: 'CmdOrCtrl+G',
+          click: (item) => setShowGrips(item.checked),
+        },
+        { type: 'separator' },
+        {
           label: 'Reload Focused Window',
           accelerator: 'CmdOrCtrl+R',
           click: (_item, win) => {
@@ -408,6 +440,7 @@ function registerIpc() {
   ipcMain.handle('config:save', (_event, next) => {
     const saved = configStore.save(next);
     saved.views.forEach(applyViewSettings);
+    grips.setVisible(saved.showGrips);
     buildMenu();
     broadcastStatus();
     return saved;
@@ -415,9 +448,20 @@ function registerIpc() {
   ipcMain.handle('config:reset', () => {
     const saved = configStore.save({});
     saved.views.forEach(applyViewSettings);
+    grips.setVisible(saved.showGrips);
     buildMenu();
     broadcastStatus();
     return saved;
+  });
+  ipcMain.handle('grips:set', (_event, visible) => setShowGrips(visible));
+
+  ipcMain.on('grip:nudge', (event, dx, dy) => {
+    const id = grips.idFor(event.sender);
+    if (id && Number.isInteger(dx) && Number.isInteger(dy)) grips.nudge(id, dx, dy);
+  });
+  ipcMain.on('grip:focusView', (event) => {
+    const id = grips.idFor(event.sender);
+    if (id) grips.focusView(id);
   });
   ipcMain.handle('config:reveal', () => shell.showItemInFolder(configStore.filePath));
   ipcMain.handle('status:get', () => fullStatus());

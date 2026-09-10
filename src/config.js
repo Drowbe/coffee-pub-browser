@@ -20,6 +20,7 @@ function defaultConfig() {
   return {
     version: CONFIG_VERSION,
     openOnLaunch: true,
+    showGrips: true,
     views: [
       {
         id: 'game',
@@ -103,6 +104,7 @@ function sanitizeConfig(input) {
   return {
     version: CONFIG_VERSION,
     openOnLaunch: src.openOnLaunch === undefined ? defaults.openOnLaunch : Boolean(src.openOnLaunch),
+    showGrips: src.showGrips === undefined ? defaults.showGrips : Boolean(src.showGrips),
     views: defaults.views.map((def) => sanitizeView(inputViews.find((v) => v && v.id === def.id), def)),
   };
 }

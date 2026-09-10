@@ -6,6 +6,7 @@ const viewsEl = document.getElementById('views');
 const template = document.getElementById('view-template');
 const saveStateEl = document.getElementById('save-state');
 const openOnLaunchEl = document.getElementById('open-on-launch');
+const showGripsEl = document.getElementById('show-grips');
 const arrangeDisplayEl = document.getElementById('arrange-display');
 const retinaHintEl = document.getElementById('retina-hint');
 
@@ -191,6 +192,7 @@ async function flushSave() {
   if (!saveStateEl.classList.contains('dirty')) return;
   try {
     config.openOnLaunch = openOnLaunchEl.checked;
+    config.showGrips = showGripsEl.checked;
     config = await api.saveConfig(config);
     // Re-fill so the user sees clamped/normalised values, but do not steal focus.
     for (const view of config.views) {
@@ -207,6 +209,7 @@ async function flushSave() {
 async function refreshConfig() {
   config = await api.getConfig();
   openOnLaunchEl.checked = config.openOnLaunch;
+  showGripsEl.checked = config.showGrips;
   for (const view of config.views) {
     const card = cards.get(view.id);
     if (card && !card.contains(document.activeElement)) fillCard(card, view);
@@ -225,12 +228,17 @@ document.getElementById('arrange').addEventListener('click', async () => {
   await refreshConfig();
 });
 openOnLaunchEl.addEventListener('change', scheduleSave);
+showGripsEl.addEventListener('change', async () => {
+  await api.setShowGrips(showGripsEl.checked);
+  await refreshConfig();
+});
 document.getElementById('clear-session').addEventListener('click', () => api.clearSession());
 document.getElementById('reveal-config').addEventListener('click', () => api.revealConfig());
 document.getElementById('reset-config').addEventListener('click', async () => {
   if (!window.confirm('Reset URLs, sizes and positions to the defaults?')) return;
   config = await api.resetConfig();
   openOnLaunchEl.checked = config.openOnLaunch;
+  showGripsEl.checked = config.showGrips;
   renderViewCards();
   renderStatus();
   setSaveState('All changes saved');
@@ -243,6 +251,9 @@ document.addEventListener('focusout', (event) => {
 
 api.onStatus((next) => {
   status = next;
+  if (typeof next.showGrips === 'boolean' && document.activeElement !== showGripsEl) {
+    showGripsEl.checked = next.showGrips;
+  }
   renderDisplays();
   renderStatus();
 });
@@ -256,6 +267,7 @@ api.onStatus((next) => {
   config = cfg;
   status = st;
   openOnLaunchEl.checked = config.openOnLaunch;
+  showGripsEl.checked = config.showGrips;
   renderViewCards();
   renderDisplays();
   renderStatus();
