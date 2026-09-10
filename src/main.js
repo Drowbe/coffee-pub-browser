@@ -538,10 +538,19 @@ function setShowGrips(visible) {
   broadcastStatus();
 }
 
+// Start every window that has a URL. The per-window "start on launch" flag
+// only applies to app launch (see openOnLaunch below).
 function openAllViews() {
   configStore
     .get()
-    .views.filter((v) => v.enabled)
+    .views.filter((v) => v.url)
+    .forEach((v) => createViewWindow(v));
+}
+
+function openLaunchViews() {
+  configStore
+    .get()
+    .views.filter((v) => v.enabled && v.url)
     .forEach((v) => createViewWindow(v));
 }
 
@@ -1015,7 +1024,7 @@ if (!app.requestSingleInstanceLock()) {
     buildMenu();
     setupTray();
     createControlWindow();
-    if (configStore.get().openOnLaunch) openAllViews();
+    if (configStore.get().openOnLaunch) openLaunchViews();
     obs.start().catch(() => {});
 
     screen.on('display-added', broadcastStatus);
