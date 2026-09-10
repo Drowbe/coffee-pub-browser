@@ -706,20 +706,29 @@ select:focus {
   letter-spacing: 0.04em;
 }
 
+.view-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .region-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+}
+
+.region-cards:empty {
+  display: none;
+}
+
+.add-region-row {
+  justify-content: space-between;
+  padding: 0 4px;
 }
 
 .region-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-input);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .region-card.disabled .region-body {
@@ -736,7 +745,7 @@ select:focus {
 .region-name-input {
   flex: 1;
   min-width: 140px;
-  background: var(--bg-card);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
@@ -773,7 +782,7 @@ select:focus {
 .selector-row input {
   flex: 1;
   min-width: 200px;
-  background: var(--bg-card);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
@@ -790,6 +799,3 @@ select:focus {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.region-card .field input {
-  background: var(--bg-card);
-}

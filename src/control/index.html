@@ -114,7 +114,8 @@
   </footer>
 
   <template id="view-template">
-    <article class="card view tab-panel">
+    <section class="view-tab tab-panel">
+    <article class="card view">
       <header class="view-head">
         <div class="view-head-left">
           <h2 class="view-title"></h2>
@@ -179,26 +180,25 @@
         </div>
       </div>
 
-      <section class="regions-section">
-        <div class="view-head">
-          <h3 class="section-title">Regions</h3>
-          <button class="btn btn-small" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
-        </div>
-        <p class="hint">A region is a part of the page that becomes its own OBS source, cropped by the app.</p>
-        <div class="region-cards" data-role="region-list"></div>
-      </section>
-
       <div class="row card-footer">
         <span class="hint">Removing a window forgets its OBS links; the sources stay in OBS.</span>
         <button class="btn btn-danger" data-action="remove-view" type="button">Remove window</button>
       </div>
     </article>
+
+    <div class="region-cards" data-role="region-list"></div>
+
+    <div class="row add-region-row">
+      <span class="hint">A region is a part of the page that becomes its own OBS source, cropped by the app.</span>
+      <button class="btn" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
+    </div>
+    </section>
   </template>
 
   <datalist id="session-groups"></datalist>
 
   <template id="region-template">
-    <article class="region-card">
+    <article class="card region-card">
       <header class="region-head">
         <label class="check" title="Disabled regions are hidden in OBS and not maintained">
           <input type="checkbox" data-rfield="enabled">

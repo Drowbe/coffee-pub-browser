@@ -471,7 +471,7 @@ function readRegionCard(el, region) {
 async function onRegionInput(event) {
   if (!event.target.matches('[data-rfield]')) return;
   const el = event.currentTarget;
-  const card = el.closest('.view');
+  const card = el.closest('.view-tab');
   const viewId = card.dataset.viewId;
   const view = config.views.find((v) => v.id === viewId);
   const region = view && view.regions.find((r) => r.id === el.dataset.region);
@@ -636,7 +636,7 @@ async function onLinkSelect(event) {
   const select = event.currentTarget;
   const name = select.value;
   if (!name) return;
-  const id = select.closest('.view').dataset.viewId;
+  const id = select.closest('.view-tab').dataset.viewId;
   select.value = '';
   select.blur();
   await api.obsLinkSource(id, name);
