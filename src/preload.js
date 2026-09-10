@@ -31,7 +31,6 @@ contextBridge.exposeInMainWorld('coffeePub', {
   removeRegion: (id, regionId) => ipcRenderer.invoke('regions:remove', id, regionId),
   regionLimits: () => ipcRenderer.invoke('regions:limits'),
   arrangeViews: (displayId) => ipcRenderer.invoke('views:arrange', displayId),
-  setShowGrips: (visible) => ipcRenderer.invoke('grips:set', visible),
   addView: () => ipcRenderer.invoke('views:add'),
   removeView: (id) => ipcRenderer.invoke('views:remove', id),
   collapseViews: () => ipcRenderer.invoke('views:collapse'),

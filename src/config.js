@@ -7,7 +7,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 5;
+const CONFIG_VERSION = 6;
+
+// Session groups: windows with the same group name share cookies and storage.
+const DEFAULT_GROUP = 'Main';
 
 const LIMITS = {
   minSize: 100,
@@ -34,10 +37,19 @@ function defaultView(index) {
     y: null,
     muted: seed ? seed.muted : true,
     enabled: true,
-    session: 'shared',
+    session: DEFAULT_GROUP,
     obsSources: [],
     regions: [],
   };
+}
+
+// Accept legacy values ("shared", "separate") and free-form group names.
+function sanitizeSession(value, view) {
+  if (value === undefined || value === null) return DEFAULT_GROUP;
+  const text = String(value).trim().slice(0, 40);
+  if (!text || text.toLowerCase() === 'shared') return DEFAULT_GROUP;
+  if (text.toLowerCase() === 'separate') return view.label || view.id;
+  return text;
 }
 
 const REGION_LIMITS = { maxRegions: 12, maxSelector: 300 };
@@ -79,7 +91,6 @@ function defaultConfig() {
   return {
     version: CONFIG_VERSION,
     openOnLaunch: true,
-    showGrips: true,
     menuBarIcon: true,
     hideDockIcon: false,
     arrangeDisplayId: null,
@@ -130,7 +141,7 @@ function sanitizeView(input, index) {
     y,
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
-    session: src.session === 'separate' ? 'separate' : 'shared',
+    session: sanitizeSession(src.session, { label: typeof src.label === 'string' ? src.label.trim() : '', id: fallback.id }),
     obsSources: sanitizeSources(src.obsSources),
     regions: sanitizeRegions(src.regions),
   };
@@ -183,7 +194,6 @@ function sanitizeConfig(input) {
   return {
     version: CONFIG_VERSION,
     openOnLaunch: src.openOnLaunch === undefined ? defaults.openOnLaunch : Boolean(src.openOnLaunch),
-    showGrips: src.showGrips === undefined ? defaults.showGrips : Boolean(src.showGrips),
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
@@ -291,4 +301,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION };
+module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP };

@@ -46,10 +46,6 @@
             <span>Start the windows when the app launches</span>
           </label>
           <label class="check">
-            <input id="show-grips" type="checkbox">
-            <span>Show grip bars above the windows (Cmd+G). Drag a grip to move its window; arrow keys resize it. Grips are never captured by OBS.</span>
-          </label>
-          <label class="check">
             <input id="menu-bar-icon" type="checkbox">
             <span>Show a menu bar icon with Start, Stop, Collapse and Sync shortcuts</span>
           </label>
@@ -60,7 +56,7 @@
         </div>
         <p class="hint" id="retina-hint"></p>
         <div class="row session-row">
-          <span class="hint">Windows set to the shared session log into Foundry together.</span>
+          <span class="hint">Windows in the same session group log into Foundry together.</span>
           <button id="clear-session" class="btn btn-danger" type="button">Sign out (clear cookies)</button>
           <button id="reveal-config" class="btn" type="button">Show config file</button>
           <button id="reset-config" class="btn" type="button">Reset to defaults</button>
@@ -145,11 +141,8 @@
           <input data-field="height" type="number" min="100" max="7680" step="1">
         </label>
         <label class="field">
-          <span>Session</span>
-          <select data-field="session">
-            <option value="shared">Shared login</option>
-            <option value="separate">Separate login</option>
-          </select>
+          <span>Session group</span>
+          <input data-field="session" type="text" list="session-groups" maxlength="40" spellcheck="false" placeholder="Main">
           <small class="hint" data-role="session-note" hidden>Takes effect the next time this window starts.</small>
         </label>
       </div>
@@ -165,6 +158,10 @@
           <span class="details-value" data-status="title">-</span>
         </div>
         <div class="details-row">
+          <span class="details-key">Window bar</span>
+          <span class="details-value hint" data-status="crop">-</span>
+        </div>
+        <div class="details-row">
           <span class="details-key">OBS sources</span>
           <span class="details-value sources">
             <span class="chips" data-role="chips"></span>
@@ -174,18 +171,57 @@
             <button class="btn btn-small" data-action="create-source" type="button">Create in OBS</button>
           </span>
         </div>
-        <div class="details-row details-row-top">
-          <span class="details-key">Regions</span>
-          <span class="details-value regions">
-            <ul class="region-list" data-role="region-list"></ul>
-            <button class="btn btn-small" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
-          </span>
-        </div>
       </div>
+
+      <section class="regions-section">
+        <div class="view-head">
+          <h3 class="section-title">Regions</h3>
+          <button class="btn btn-small" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
+        </div>
+        <p class="hint">A region is a part of the page that becomes its own OBS source, cropped by the app.</p>
+        <div class="region-cards" data-role="region-list"></div>
+      </section>
 
       <div class="row card-footer">
         <span class="hint">Removing a window forgets its OBS links; the sources stay in OBS.</span>
         <button class="btn btn-danger" data-action="remove-view" type="button">Remove window</button>
+      </div>
+    </article>
+  </template>
+
+  <datalist id="session-groups"></datalist>
+
+  <template id="region-template">
+    <article class="region-card">
+      <header class="region-head">
+        <label class="check" title="Disabled regions are hidden in OBS and not maintained">
+          <input type="checkbox" data-rfield="enabled">
+        </label>
+        <input class="region-name-input" data-rfield="name" type="text" maxlength="40" placeholder="Region name">
+        <span class="region-obs" data-role="region-obs"></span>
+        <button class="btn btn-small btn-danger" data-action="delete-region" type="button">Delete</button>
+      </header>
+      <div class="region-body">
+        <div class="row">
+          <span class="field-label">Defined by</span>
+          <label class="check"><input type="radio" data-rfield="mode" value="rect"><span>Rectangle</span></label>
+          <label class="check"><input type="radio" data-rfield="mode" value="selector"><span>CSS selector</span></label>
+        </div>
+        <div class="row selector-row" data-role="selector-row">
+          <input data-rfield="selector" type="text" spellcheck="false" placeholder="#scoreboard, [data-item-id=&quot;party-health&quot;], or a list of class names">
+          <button class="btn btn-small" data-action="measure-region" type="button">Measure</button>
+          <small class="hint" data-role="measure-out"></small>
+        </div>
+        <div class="grid grid-4">
+          <label class="field"><span>X</span><input data-rfield="x" type="number" min="0" step="1"></label>
+          <label class="field"><span>Y</span><input data-rfield="y" type="number" min="0" step="1"></label>
+          <label class="field"><span>Width</span><input data-rfield="width" type="number" min="1" step="1"></label>
+          <label class="field"><span>Height</span><input data-rfield="height" type="number" min="1" step="1"></label>
+        </div>
+        <div class="row">
+          <button class="btn btn-small" data-action="pick-region" type="button">Pick on snapshot</button>
+          <span class="hint" data-role="region-note"></span>
+        </div>
       </div>
     </article>
   </template>
@@ -205,27 +241,7 @@
           <p class="hint">Drag on the snapshot to draw the region, or type the numbers. Sizes are in window points.</p>
         </div>
         <div class="picker-form">
-          <label class="field">
-            <span>Name</span>
-            <input id="region-name" type="text" maxlength="40">
-          </label>
-          <div class="field">
-            <span>Defined by</span>
-            <div class="radio-row">
-              <label class="check"><input type="radio" name="region-mode" value="rect" checked><span>Rectangle</span></label>
-              <label class="check"><input type="radio" name="region-mode" value="selector"><span>CSS selector</span></label>
-            </div>
-          </div>
-          <div class="field" id="selector-field" hidden>
-            <span>Selector</span>
-            <div class="row">
-              <input id="region-selector" type="text" spellcheck="false" placeholder="#scoreboard or [data-item-id=&quot;party-health&quot;]">
-              <button id="region-measure" class="btn btn-small" type="button">Measure</button>
-            </div>
-            <small class="hint">A plain list of class names is accepted too. The element is re-measured on every OBS sync, so the crop follows it.</small>
-            <small class="hint" id="measure-result" hidden></small>
-            <small class="field-warning" id="measure-warning" hidden>Element not found in the page.</small>
-          </div>
+          <p class="hint" id="picker-region-name"></p>
           <div class="grid grid-2">
             <label class="field"><span>X</span><input id="region-x" type="number" min="0" step="1"></label>
             <label class="field"><span>Y</span><input id="region-y" type="number" min="0" step="1"></label>

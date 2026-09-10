@@ -1,7 +1,7 @@
 {
   "name": "coffee-pub-browser",
   "productName": "Coffee Pub Browser",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Wraps the FoundryVTT Game and Stream views in two fixed-size Chromium windows that OBS can capture as sources.",
   "main": "src/main.js",
   "private": true,
@@ -19,7 +19,7 @@
     "dist:arm64": "npm run build-info && electron-builder --mac --arm64",
     "dist:x64": "npm run build-info && electron-builder --mac --x64",
     "pack": "npm run build-info && electron-builder --mac --dir",
-    "check": "node --check src/main.js && node --check src/config.js && node --check src/grips.js && node --check src/obs.js && node --check src/preload.js && node --check src/grip-preload.js && node --check src/control/control.js && node --check src/grip/grip.js"
+    "check": "node --check src/main.js && node --check src/config.js && node --check src/obs.js && node --check src/preload.js && node --check src/bar-preload.js && node --check src/control/control.js && node --check src/bar/bar.js"
   },
   "devDependencies": {
     "electron": "^44.3.0",

@@ -2,9 +2,8 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, screen, shell, Menu, Tray, nativeImage, session, dialog, safeStorage } = require('electron');
-const { ConfigStore, LIMITS, REGION_LIMITS } = require('./config');
-const { Grips } = require('./grips');
+const { app, BrowserWindow, WebContentsView, ipcMain, screen, shell, Menu, Tray, nativeImage, session, dialog, safeStorage } = require('electron');
+const { ConfigStore, LIMITS, REGION_LIMITS, DEFAULT_GROUP } = require('./config');
 const { ObsBridge } = require('./obs');
 
 const APP_NAME = 'Coffee Pub Browser';
@@ -20,25 +19,38 @@ function readBuildInfo() {
 const BUILD_INFO = readBuildInfo();
 const APP_VERSION = require('../package.json').version;
 const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' : ''})`;
-// The shared, persistent session: windows set to "shared" log in together.
-// Windows set to "separate" get their own partition (persist:view-<id>).
+// Storage partition of the default session group ("Main"); other groups get
+// their own partition, see partitionFor().
 const PARTITION = 'persist:coffeepub';
 const PARK_STRIP = 40; // points of a collapsed window left visible at the display edge
+const BAR_HEIGHT = 28; // the app's own bar at the top of each window (cropped out in OBS)
 
+// Session group -> storage partition. "Main" keeps the original partition so
+// existing logins survive; other groups get their own.
 function partitionFor(view) {
-  return view.session === 'separate' ? `persist:view-${view.id}` : PARTITION;
+  const group = String(view.session || DEFAULT_GROUP);
+  if (group === DEFAULT_GROUP) return PARTITION;
+  const slug = group.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'group';
+  return `persist:group-${slug}`;
 }
 
-// CSS selector helper: a bare list of class names ("a b") becomes ".a.b".
-function normalizeSelector(text) {
-  if (typeof text !== 'string') return '';
+// Selector candidates to try in order: the text as typed, then, when it has
+// no selector punctuation, the same words read as a list of class names
+// ("secondary-bar-item secondary-bar-item-progressbar" -> ".secondary-bar-item.secondary-bar-item-progressbar").
+function selectorCandidates(text) {
+  if (typeof text !== 'string') return [];
   const trimmed = text.trim();
-  if (!trimmed) return '';
-  if (/[.#\[\]>:+~*,="']/.test(trimmed)) return trimmed;
-  return trimmed
-    .split(/\s+/)
-    .map((c) => `.${c}`)
-    .join('');
+  if (!trimmed) return [];
+  const candidates = [trimmed];
+  if (!/[.#\[\]>:+~*,="']/.test(trimmed)) {
+    candidates.push(
+      trimmed
+        .split(/\s+/)
+        .map((c) => `.${c}`)
+        .join(''),
+    );
+  }
+  return candidates;
 }
 
 app.setName(APP_NAME);
@@ -56,23 +68,9 @@ const configStore = new ConfigStore(path.join(app.getPath('userData'), 'config.j
 
 /** @type {Map<string, BrowserWindow>} */
 const viewWindows = new Map();
-const grips = new Grips({
-  isEnabled: () => configStore.get().showGrips,
-  onViewMoved: (id, x, y) => {
-    if (parked.has(id)) {
-      // Dragging a collapsed window out of its parking spot un-parks it.
-      parked.delete(id);
-      if (parked.size === 0) collapsed = false;
-    }
-    configStore.updateView(id, { x, y });
-    broadcastStatus();
-  },
-  onViewResized: (id, width, height) => {
-    configStore.updateView(id, { width, height });
-    broadcastStatus();
-  },
-  sizeLimits: { min: LIMITS.minSize, max: LIMITS.maxSize },
-});
+/** @type {Map<string, WebContentsView>} */
+const pageViews = new Map();
+let parking = false; // true while collapse/expand move windows programmatically
 
 // Shown in a window that has no URL configured yet.
 const PLACEHOLDER_URL =
@@ -151,10 +149,10 @@ function viewStatus(view) {
   if (!isAlive(win)) {
     return { id: view.id, open: false };
   }
-  const [width, height] = win.getContentSize();
+  const [width, height] = pageSize(win);
   const [x, y] = win.getPosition();
   const display = screen.getDisplayMatching(win.getBounds());
-  const wc = win.webContents;
+  const wc = pageOf(view.id);
   return {
     id: view.id,
     open: true,
@@ -168,9 +166,11 @@ function viewStatus(view) {
     scaleFactor: display.scaleFactor,
     displayId: display.id,
     displayLabel: displaySummary(display).label,
-    url: wc.getURL(),
-    loading: wc.isLoading(),
-    muted: wc.isAudioMuted(),
+    url: wc ? wc.getURL() : '',
+    loading: wc ? wc.isLoading() : false,
+    muted: wc ? wc.isAudioMuted() : false,
+    barHeight: BAR_HEIGHT,
+    cropTop: Math.round(BAR_HEIGHT * display.scaleFactor),
   };
 }
 
@@ -213,19 +213,62 @@ function systemWindowId(win) {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-// Measure a page element inside a view window: { x, y, width, height } in
-// window points, or null when the element is not found.
-async function measureSelector(win, rawSelector) {
-  const selector = normalizeSelector(rawSelector);
-  if (!isAlive(win) || !selector) return null;
+// The Foundry page's webContents for a view, or null when not open.
+function pageOf(id) {
+  const view = pageViews.get(id);
+  return view && !view.webContents.isDestroyed() ? view.webContents : null;
+}
+
+// Size of the page area (window content minus the bar), in points.
+function pageSize(win) {
+  const [w, h] = win.getContentSize();
+  return [w, Math.max(1, h - BAR_HEIGHT)];
+}
+
+function scaleFactorOf(win) {
+  return screen.getDisplayMatching(win.getBounds()).scaleFactor;
+}
+
+// Crop/Pad values (captured pixels) that remove the bar from a window capture.
+function barCrop(win) {
+  if (!isAlive(win)) return null;
+  return { left: 0, top: Math.round(BAR_HEIGHT * scaleFactorOf(win)), right: 0, bottom: 0 };
+}
+
+function layoutPage(id) {
+  const win = viewWindows.get(id);
+  const view = pageViews.get(id);
+  if (!isAlive(win) || !view) return;
+  const [w, h] = pageSize(win);
+  view.setBounds({ x: 0, y: BAR_HEIGHT, width: w, height: h });
+}
+
+function sendBarState(id) {
+  const win = viewWindows.get(id);
+  const view = configStore.getView(id);
+  if (!isAlive(win) || !view || win.webContents.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  const [width, height] = pageSize(win);
+  win.webContents.send('bar:state', { id, label: view.label, x, y, width, height });
+}
+
+// Measure a page element inside a view: { x, y, width, height } in page
+// points, or null when the element is not found.
+async function measureSelector(wc, rawSelector) {
+  const candidates = selectorCandidates(rawSelector);
+  if (!wc || wc.isDestroyed() || !candidates.length) return null;
   const code = `(() => {
-    const el = document.querySelector(${JSON.stringify(selector)});
+    let el = null;
+    for (const sel of ${JSON.stringify(candidates)}) {
+      try { el = document.querySelector(sel); } catch (err) { el = null; }
+      if (el) break;
+    }
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, width: r.width, height: r.height };
   })()`;
   try {
-    const rect = await win.webContents.executeJavaScript(code, true);
+    const rect = await wc.executeJavaScript(code, true);
     if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
     return {
       x: Math.max(0, Math.round(rect.x)),
@@ -238,18 +281,19 @@ async function measureSelector(win, rawSelector) {
   }
 }
 
-// Crop/Pad values (captured pixels) that isolate a region of a view window.
+// Crop/Pad values (captured pixels) that isolate a region of a view's page.
+// The region is in page points; the bar above the page is cropped away too.
 function cropFor(win, region) {
   if (!isAlive(win)) return null;
-  const [w, h] = win.getContentSize();
-  const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+  const [w, h] = pageSize(win);
+  const sf = scaleFactorOf(win);
   const x = Math.min(region.x, w);
   const y = Math.min(region.y, h);
   const width = Math.max(1, Math.min(region.width, w - x));
   const height = Math.max(1, Math.min(region.height, h - y));
   return {
     left: Math.round(x * sf),
-    top: Math.round(y * sf),
+    top: Math.round((BAR_HEIGHT + y) * sf),
     right: Math.round((w - x - width) * sf),
     bottom: Math.round((h - y - height) * sf),
   };
@@ -257,8 +301,8 @@ function cropFor(win, region) {
 
 // Re-measure selector regions of an open view and save any changes.
 async function refreshRegions(view) {
-  const win = viewWindows.get(view.id);
-  if (!isAlive(win)) return view.regions;
+  const wc = pageOf(view.id);
+  if (!wc) return view.regions;
   let changed = false;
   const regions = [];
   for (const region of view.regions) {
@@ -266,7 +310,7 @@ async function refreshRegions(view) {
       regions.push(region);
       continue;
     }
-    const rect = await measureSelector(win, region.selector);
+    const rect = await measureSelector(wc, region.selector);
     if (rect && (rect.x !== region.x || rect.y !== region.y || rect.width !== region.width || rect.height !== region.height)) {
       regions.push({ ...region, ...rect });
       changed = true;
@@ -293,6 +337,7 @@ async function syncObs() {
       title: windowTitle(view),
       windowId: systemWindowId(win),
       sources: view.obsSources,
+      crop: barCrop(win),
       regions: regions.filter((r) => r.enabled).map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
     });
   }
@@ -322,9 +367,9 @@ function createViewWindow(view) {
   const options = {
     title: windowTitle(view),
     width: view.width,
-    height: view.height,
+    height: view.height + BAR_HEIGHT,
     useContentSize: true,
-    // Borderless so the captured window is exactly the page, nothing else.
+    // Borderless: the window is the app's bar plus the page, nothing else.
     frame: false,
     roundedCorners: false,
     hasShadow: false,
@@ -332,18 +377,16 @@ function createViewWindow(view) {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    backgroundColor: '#000000',
+    backgroundColor: '#1a1410',
     show: false,
     webPreferences: {
-      partition: partitionFor(view),
+      preload: path.join(__dirname, 'bar-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      backgroundThrottling: false,
       spellcheck: false,
     },
   };
-  configureSession(partitionFor(view));
   if (Number.isInteger(view.x) && Number.isInteger(view.y)) {
     options.x = view.x;
     options.y = view.y;
@@ -352,6 +395,29 @@ function createViewWindow(view) {
   const win = new BrowserWindow(options);
   viewWindows.set(view.id, win);
 
+  // The bar is the window's own page; Foundry renders in a child view below it.
+  win.loadFile(path.join(__dirname, 'bar', 'index.html'));
+  win.webContents.on('did-finish-load', () => sendBarState(view.id));
+  // Keep our stable title so the window is easy to find in OBS.
+  win.on('page-title-updated', (event) => event.preventDefault());
+
+  configureSession(partitionFor(view));
+  const page = new WebContentsView({
+    webPreferences: {
+      partition: partitionFor(view),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+      spellcheck: false,
+    },
+  });
+  pageViews.set(view.id, page);
+  win.contentView.addChildView(page);
+  page.setBackgroundColor('#000000');
+  layoutPage(view.id);
+  const wc = page.webContents;
+
   const showView = () => {
     if (!isAlive(win) || win.isVisible()) return;
     win.show();
@@ -359,54 +425,56 @@ function createViewWindow(view) {
     scheduleObsSync();
   };
 
-  // Foundry rewrites document.title constantly; keep our stable title so the
-  // window is easy to find in the OBS "Window Capture" list.
-  win.on('page-title-updated', (event) => event.preventDefault());
-
   // Anything Foundry tries to open in a new window goes to the default browser.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  wc.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-
-  win.webContents.on('did-finish-load', broadcastStatus);
-  win.webContents.on('did-start-loading', broadcastStatus);
-  win.webContents.on('did-stop-loading', broadcastStatus);
-  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+  wc.on('did-finish-load', broadcastStatus);
+  wc.on('did-start-loading', broadcastStatus);
+  wc.on('did-stop-loading', broadcastStatus);
+  wc.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3 is ERR_ABORTED, e.g. a redirect.
     console.warn(`[${view.id}] Failed to load ${url}: ${description} (${code})`);
-    // Still show the window so the Chromium error page is visible and the
-    // window can be reloaded once the server is reachable.
-    showView();
+    broadcastStatus();
   });
-  win.webContents.on('render-process-gone', (_event, details) => {
+  wc.on('render-process-gone', (_event, details) => {
     console.warn(`[${view.id}] Renderer gone (${details.reason}), reloading.`);
-    if (isAlive(win)) win.webContents.reload();
+    if (!wc.isDestroyed()) wc.reload();
   });
+  wc.setAudioMuted(Boolean(view.muted));
 
-  win.webContents.setAudioMuted(Boolean(view.muted));
-
+  win.on('move', () => sendBarState(view.id));
   win.on('moved', () => {
-    if (!isAlive(win) || parked.has(view.id)) return;
+    if (!isAlive(win) || parking) return;
+    if (parked.has(view.id)) {
+      // Dragged out of its parking spot: no longer collapsed.
+      parked.delete(view.id);
+      if (parked.size === 0) collapsed = false;
+      buildMenu();
+    }
     const [x, y] = win.getPosition();
     configStore.updateView(view.id, { x, y });
     broadcastStatus();
   });
   win.on('resize', () => {
+    layoutPage(view.id);
+    sendBarState(view.id);
     broadcastStatus();
     scheduleObsSync();
   });
   win.on('closed', () => {
     viewWindows.delete(view.id);
+    pageViews.delete(view.id);
+    if (!wc.isDestroyed()) wc.close();
     broadcastStatus();
   });
 
   win.once('ready-to-show', showView);
-  // Safety net: never leave a window invisible if the page stalls.
-  setTimeout(showView, 8000);
+  // Safety net: never leave a window invisible if the bar page stalls.
+  setTimeout(showView, 5000);
 
-  win.loadURL(view.url || PLACEHOLDER_URL);
-  grips.attach(view.id, win, view.label);
+  wc.loadURL(view.url || PLACEHOLDER_URL);
   broadcastStatus();
   return win;
 }
@@ -416,22 +484,38 @@ function applyViewSettings(view) {
   const win = viewWindows.get(view.id);
   if (!isAlive(win)) return;
   if (win.getTitle() !== windowTitle(view)) win.setTitle(windowTitle(view));
-  grips.setLabel(view.id, view.label);
-  const [w, h] = win.getContentSize();
+  const [w, h] = pageSize(win);
   if (w !== view.width || h !== view.height) {
-    win.setContentSize(view.width, view.height);
+    win.setContentSize(view.width, view.height + BAR_HEIGHT);
   }
-  if (Number.isInteger(view.x) && Number.isInteger(view.y)) {
+  if (Number.isInteger(view.x) && Number.isInteger(view.y) && !parked.has(view.id)) {
     const [x, y] = win.getPosition();
     if (x !== view.x || y !== view.y) win.setPosition(view.x, view.y);
   }
-  win.webContents.setAudioMuted(Boolean(view.muted));
+  sendBarState(view.id);
+  const wc = pageOf(view.id);
+  if (!wc) return;
+  wc.setAudioMuted(Boolean(view.muted));
   const target = view.url || PLACEHOLDER_URL;
-  const current = win.webContents.getURL();
+  const current = wc.getURL();
   const currentIsPlaceholder = current.startsWith('data:');
   if (view.url ? currentIsPlaceholder || current !== view.url : !currentIsPlaceholder) {
-    win.loadURL(target);
+    wc.loadURL(target);
   }
+}
+
+// Resize the page area from the bar (arrow keys), keeping the top-left corner.
+function resizePage(id, dw, dh) {
+  const win = viewWindows.get(id);
+  if (!isAlive(win)) return;
+  const clamp = (n) => Math.min(LIMITS.maxSize, Math.max(LIMITS.minSize, n));
+  const [w, h] = pageSize(win);
+  const width = clamp(w + dw);
+  const height = clamp(h + dh);
+  if (width === w && height === h) return;
+  win.setContentSize(width, height + BAR_HEIGHT);
+  configStore.updateView(id, { width, height });
+  broadcastStatus();
 }
 
 function closeView(id) {
@@ -440,8 +524,14 @@ function closeView(id) {
 }
 
 function reloadView(id) {
-  const win = viewWindows.get(id);
-  if (isAlive(win)) win.webContents.reloadIgnoringCache();
+  const wc = pageOf(id);
+  if (wc) wc.reloadIgnoringCache();
+}
+
+// View id for a BrowserWindow (a view window or null for the control panel).
+function viewIdOf(win) {
+  for (const [id, w] of viewWindows) if (w === win) return id;
+  return null;
 }
 
 // Centre the window on the display it is currently on and bring it forward.
@@ -451,7 +541,8 @@ function resetView(id) {
   if (!isAlive(win)) return;
   const area = screen.getDisplayMatching(win.getBounds()).workArea;
   const x = Math.round(area.x + (area.width - view.width) / 2);
-  const y = Math.round(area.y + (area.height - view.height) / 2);
+  const y = Math.round(area.y + (area.height - view.height - BAR_HEIGHT) / 2);
+  parked.delete(id);
   configStore.updateView(id, { x, y });
   applyViewSettings(getView(id));
   win.show();
@@ -481,7 +572,7 @@ function arrangeViews(displayId) {
     }
     configStore.updateView(view.id, { x, y });
     x += view.width;
-    rowHeight = Math.max(rowHeight, view.height);
+    rowHeight = Math.max(rowHeight, view.height + BAR_HEIGHT);
   }
   configStore.get().views.forEach(applyViewSettings);
   broadcastStatus();
@@ -508,6 +599,7 @@ function removeView(id) {
 // Slide every open window to the right edge of its display, leaving a thin
 // strip on screen so OBS keeps capturing it. Expand restores the positions.
 function collapseViews() {
+  parking = true;
   for (const [id, win] of viewWindows) {
     if (!isAlive(win) || parked.has(id)) continue;
     const [x, y] = win.getPosition();
@@ -515,25 +607,25 @@ function collapseViews() {
     parked.set(id, { x, y });
     win.setPosition(area.x + area.width - PARK_STRIP, y);
   }
+  setTimeout(() => {
+    parking = false;
+  }, 300);
   collapsed = true;
   buildMenu();
   broadcastStatus();
 }
 
 function expandViews() {
+  parking = true;
   for (const [id, pos] of parked) {
     const win = viewWindows.get(id);
     if (isAlive(win)) win.setPosition(pos.x, pos.y);
   }
+  setTimeout(() => {
+    parking = false;
+  }, 300);
   parked.clear();
   collapsed = false;
-  buildMenu();
-  broadcastStatus();
-}
-
-function setShowGrips(visible) {
-  configStore.save({ ...configStore.get(), showGrips: Boolean(visible) });
-  grips.setVisible(Boolean(visible));
   buildMenu();
   broadcastStatus();
 }
@@ -658,13 +750,6 @@ function buildMenu() {
         { label: 'Close All', click: () => closeAllViews() },
         { type: 'separator' },
         {
-          label: 'Show Grip Bars',
-          type: 'checkbox',
-          checked: configStore.get().showGrips,
-          accelerator: 'CmdOrCtrl+G',
-          click: (item) => setShowGrips(item.checked),
-        },
-        {
           label: collapsed ? 'Expand Windows' : 'Collapse Windows to Edge',
           accelerator: 'CmdOrCtrl+Shift+C',
           click: () => (collapsed ? expandViews() : collapseViews()),
@@ -674,14 +759,20 @@ function buildMenu() {
           label: 'Reload Focused Window',
           accelerator: 'CmdOrCtrl+R',
           click: (_item, win) => {
-            if (isAlive(win)) win.webContents.reload();
+            if (!isAlive(win)) return;
+            const id = viewIdOf(win);
+            if (id) reloadView(id);
+            else win.webContents.reload();
           },
         },
         {
           label: 'Toggle Developer Tools',
           accelerator: 'Alt+CmdOrCtrl+I',
           click: (_item, win) => {
-            if (isAlive(win)) win.webContents.toggleDevTools();
+            if (!isAlive(win)) return;
+            const id = viewIdOf(win);
+            const wc = id ? pageOf(id) : win.webContents;
+            if (wc) wc.toggleDevTools();
           },
         },
       ],
@@ -762,7 +853,6 @@ function registerIpc() {
   ipcMain.handle('config:save', (_event, next) => {
     const saved = configStore.save(next);
     saved.views.forEach(applyViewSettings);
-    grips.setVisible(saved.showGrips);
     setupTray();
     buildMenu();
     broadcastStatus();
@@ -771,13 +861,11 @@ function registerIpc() {
   ipcMain.handle('config:reset', () => {
     const saved = configStore.save({});
     saved.views.forEach(applyViewSettings);
-    grips.setVisible(saved.showGrips);
     setupTray();
     buildMenu();
     broadcastStatus();
     return saved;
   });
-  ipcMain.handle('grips:set', (_event, visible) => setShowGrips(visible));
   ipcMain.handle('views:add', () => addView());
   ipcMain.handle('views:remove', (_event, id) => removeView(id));
   ipcMain.handle('views:collapse', () => collapseViews());
@@ -809,6 +897,7 @@ function registerIpc() {
     let n = 2;
     while (taken.has(name)) name = `Coffee Pub - ${view.label} ${n++}`;
     await obs.createInput(name, windowId);
+    await obs.ensureCropFilter(name, barCrop(viewWindows.get(id)));
     configStore.updateView(id, { obsSources: [...view.obsSources, name] });
     broadcastStatus();
     return name;
@@ -825,20 +914,20 @@ function registerIpc() {
   // --- Regions ---
   ipcMain.handle('view:snapshot', async (_event, id) => {
     const win = viewWindows.get(id);
-    if (!isAlive(win) || !win.isVisible()) throw new Error('Start the window first.');
-    const [width, height] = win.getContentSize();
-    const image = await win.webContents.capturePage();
+    const wc = pageOf(id);
+    if (!isAlive(win) || !win.isVisible() || !wc) throw new Error('Start the window first.');
+    const [width, height] = pageSize(win);
+    const image = await wc.capturePage();
     return { dataUrl: image.toJPEG(80).length ? `data:image/jpeg;base64,${image.toJPEG(80).toString('base64')}` : image.toDataURL(), width, height };
   });
   ipcMain.handle('view:measure', async (_event, id, selector) => {
-    const win = viewWindows.get(id);
-    if (!isAlive(win)) throw new Error('Start the window first.');
-    return measureSelector(win, selector);
+    const wc = pageOf(id);
+    if (!wc) throw new Error('Start the window first.');
+    return measureSelector(wc, selector);
   });
   ipcMain.handle('regions:save', async (_event, id, region) => {
     getView(id);
     const input = region && typeof region === 'object' ? { ...region } : {};
-    if (typeof input.selector === 'string') input.selector = normalizeSelector(input.selector);
     const saved = configStore.saveRegion(id, input);
     scheduleObsSync();
     broadcastStatus();
@@ -862,6 +951,7 @@ function registerIpc() {
     if (typeof inputName !== 'string' || !inputName) throw new Error('No source name.');
     if (obs.status().inputs.includes(inputName)) throw new Error(`"${inputName}" already exists in OBS.`);
     await obs.createInput(inputName, windowId);
+    await obs.ensureCropFilter(inputName, barCrop(viewWindows.get(id)));
     if (!view.obsSources.includes(inputName)) {
       configStore.updateView(id, { obsSources: [...view.obsSources, inputName] });
     }
@@ -913,13 +1003,14 @@ function registerIpc() {
     broadcastStatus();
   });
 
-  ipcMain.on('grip:resize', (event, dw, dh) => {
-    const id = grips.idFor(event.sender);
-    if (id && Number.isInteger(dw) && Number.isInteger(dh)) grips.resize(id, dw, dh);
+  ipcMain.on('bar:resize', (event, dw, dh) => {
+    const id = viewIdOf(BrowserWindow.fromWebContents(event.sender));
+    if (id && Number.isInteger(dw) && Number.isInteger(dh)) resizePage(id, dw, dh);
   });
-  ipcMain.on('grip:focusView', (event) => {
-    const id = grips.idFor(event.sender);
-    if (id) grips.focusView(id);
+  ipcMain.on('bar:focusPage', (event) => {
+    const id = viewIdOf(BrowserWindow.fromWebContents(event.sender));
+    const wc = id ? pageOf(id) : null;
+    if (wc) wc.focus();
   });
   ipcMain.handle('config:reveal', () => shell.showItemInFolder(configStore.filePath));
   ipcMain.handle('status:get', () => fullStatus());
@@ -943,8 +1034,8 @@ function registerIpc() {
   ipcMain.handle('view:reload', (_event, id) => reloadView(id));
   ipcMain.handle('view:reset', (_event, id) => resetView(id));
   ipcMain.handle('view:devtools', (_event, id) => {
-    const win = viewWindows.get(id);
-    if (isAlive(win)) win.webContents.toggleDevTools();
+    const wc = pageOf(id);
+    if (wc) wc.toggleDevTools();
   });
   ipcMain.handle('views:arrange', (_event, displayId) => arrangeViews(displayId));
   ipcMain.handle('views:openAll', () => openAllViews());
@@ -966,9 +1057,7 @@ function registerIpc() {
       await ses.clearStorageData();
       await ses.clearCache();
     }
-    for (const win of viewWindows.values()) {
-      if (isAlive(win)) win.webContents.reload();
-    }
+    for (const id of viewWindows.keys()) reloadView(id);
     return true;
   });
 }

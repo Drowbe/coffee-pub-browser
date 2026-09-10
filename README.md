@@ -5,7 +5,9 @@ fixed-size Chromium windows so OBS can capture each one as its own source. It is
 recording live Foundry sessions: the Game window shows the canvas, the Stream window shows the
 chat stream. You can run one to five windows; two is the default.
 
-- Borderless windows at the exact pixel size you configure (no title bar to crop in OBS).
+- Borderless windows with a slim bar of the app's own at the top for dragging and resizing,
+  and the page at the exact pixel size you configure below it. Linked OBS sources get a crop
+  that removes the bar, so OBS sees only the page.
 - Stable window names (`Coffee Pub Browser - Game`, `Coffee Pub Browser - Stream`) so OBS
   Window Capture always finds them, even though Foundry keeps rewriting the page title.
 - All windows share one login session. Log into Foundry once in the Game window.
@@ -13,14 +15,13 @@ chat stream. You can run one to five windows; two is the default.
   source stays smooth.
 - A control panel to set URL, size, position and audio mute per window, with auto-arrange and
   a live readout of the pixel size OBS will capture.
-- A grip bar docked above each window for dragging it around and resizing it with the arrow
-  keys. The grip is a separate window, so it never shows up in the OBS capture.
 - An OBS connection that keeps your window-capture sources pointed at these windows after
   every launch, so you never have to re-pick a window in OBS, and creates sources for you.
 - Named regions: mark part of a window, by drawing a rectangle on a snapshot or by naming a
   CSS selector, and the app creates a cropped OBS source for it and keeps the crop current.
-- Per-window choice of a shared Foundry login or a separate one, an optional menu bar icon,
-  and a Collapse command that slides the windows to the screen edge while OBS keeps capturing.
+- Session groups: windows in the same group share a Foundry login, windows in different
+  groups do not. An optional menu bar icon, and a Collapse command that slides the windows to
+  the screen edge while OBS keeps capturing.
 
 ## Requirements
 
@@ -83,24 +84,20 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    that adds a window (up to five). Each window tab has a **Remove window** button at the
    bottom.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
-   dedicated observer user works well). Windows whose **Session** is set to *Shared login*
-   use that same login; set a window to *Separate login* to give it its own cookies, for a
-   different Foundry user or a different site. The change applies the next time the window
-   starts.
+   dedicated observer user works well). Windows in the same **Session group** share that
+   login; give a window a different group name to give it its own cookies, for a different
+   Foundry user or a different site. Any number of windows can share a group. The change
+   applies the next time the window starts.
 3. In the control panel, set each window's **Width** and **Height** to the exact size you
    want. Changes apply live to open windows and are saved automatically.
 4. The **Start** button on each card opens its window and turns into **Stop**; an ACTIVE tag
    shows while the window is open. **Reset window** centers it on its display and brings it to
    the front.
-5. Move a window by dragging the **grip bar** docked above it. Click a grip and use the arrow
-   keys to resize its window: Right/Left change the width and Down/Up change the height by
-   1 px, or 10 px with Shift. The grip shows the current position and size. Double-click a
-   grip to focus its window. **Cmd+G** hides or shows all grips.
-   **Auto-arrange on display** lays the windows out left to right from the top-left corner of
-   a display, wrapping to a new row when they no longer fit. You can also set **X** / **Y** by
-   hand in the panel. When a window is flush with the top of the display, its grip overlaps
-   the window's top edge instead; that only affects what you see on the desktop, not the OBS
-   capture.
+5. Move a window by dragging the **bar** at its top. Click the bar and use the arrow keys to
+   resize the page: Right/Left change the width and Down/Up change the height by 1 px, or
+   10 px with Shift. The bar shows the current position and page size. Double-click it to
+   focus the page for typing. **Auto-arrange on display** lays the windows out left to right
+   from the top-left corner of a display, wrapping to a new row when they no longer fit.
 6. New windows start with no URL and show a placeholder until you enter one. Each window is
    listed in OBS by its label, so give every window a different label.
 7. **Collapse** in the header, the menu bar icon, or Cmd+Shift+C slides every open window to
@@ -114,11 +111,17 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
 
 ### Add the windows to OBS
 
+The easy way is the OBS connection described below: the app creates the sources and keeps
+them cropped and pointed at the windows. By hand:
+
 1. In OBS, click **+** under Sources and choose **macOS Screen Capture**.
 2. Set **Method** to **Window Capture** and pick **Coffee Pub Browser - Game** from the
    **Window** list. Turn off **Show Cursor** if you do not want the pointer recorded.
-3. Repeat for **Coffee Pub Browser - Stream**.
-4. The first time, macOS asks to give OBS **Screen Recording** permission
+3. Crop the top of the source by the amount shown on the window's tab under **Window bar**
+   (28 px, or 56 px on a Retina display) so the app's bar is not recorded: right-click the
+   source, Transform, Edit Transform, and set the top crop.
+4. Repeat for **Coffee Pub Browser - Stream**.
+5. The first time, macOS asks to give OBS **Screen Recording** permission
    (System Settings > Privacy & Security > Screen Recording). Restart OBS after granting it.
 
 The windows can sit behind other windows, but they must not be minimized (the app
@@ -136,7 +139,8 @@ re-pick the window. The app fixes this by talking to OBS over its built-in WebSo
    tick **Connect to OBS**. The section shows CONNECTED once it has connected, and reconnects
    on its own whenever OBS is running.
 3. On every connection and every time one of the app's windows starts, the app points each
-   linked OBS source at the window's current ID. If an OBS source already captures one of the
+   linked OBS source at the window's current ID and keeps a `Coffee Pub Crop` filter on it
+   that removes the app's bar. If an OBS source already captures one of the
    windows it is linked automatically and listed under **OBS sources** on the window's card.
    Otherwise link it from the **Link existing source...** dropdown once, or click **Create in
    OBS** to add a new window-capture source named after the window to the current scene.
@@ -149,13 +153,15 @@ app and OBS have to run on the same Mac, since OBS can only capture windows on i
 If a window shows several things you want as separate OBS sources, for example a scoreboard
 and a status panel pinned inside the Stream view, define a **region** for each.
 
-1. With the window started, click **Add region** on its card. A snapshot of the window opens.
-2. Drag a rectangle on the snapshot, or type X, Y, Width and Height in window points. Give the
-   region a name.
+1. With the window started, click **Add region** on its tab. A region card appears with a
+   name, an enabled checkbox, and its settings. Changes save as you type.
+2. Click **Pick on snapshot** and drag a rectangle on the snapshot of the page, or type X, Y,
+   Width and Height in page points.
 3. For an element your own module renders, pick **CSS selector** instead, enter the selector
-   (for example `#scoreboard`) and click **Measure**. The app reads the element's position from
-   the page, and re-measures it on every OBS sync so the crop follows the element.
-4. Click **Save region**, then **Add to OBS**. The app adds a window-capture source named
+   (for example `#scoreboard`, or a plain list of class names) and click **Measure**. The app
+   reads the element's position from the page, and re-measures it on every OBS sync so the
+   crop follows the element.
+4. Click **Add to OBS**. The app adds a window-capture source named
    after the window and region, such as `Stream - Scoreboard`, with a **Crop/Pad** filter
    called `Coffee Pub Crop` that isolates the region. Drop that source into any scene.
 
@@ -184,7 +190,6 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | Shortcut | Action |
 | --- | --- |
 | Cmd+0 | Show the control panel |
-| Cmd+G | Show or hide the grip bars |
 | Cmd+Shift+C | Collapse the windows to the screen edge, or expand them |
 | Cmd+1 to Cmd+5 | Open (or focus) window 1 to 5 |
 | Cmd+Shift+1 to Cmd+Shift+5 | Reload window 1 to 5 |
@@ -200,7 +205,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 5,
+  "version": 6,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "enabled": false, "host": "127.0.0.1", "port": 4455 },
@@ -215,6 +220,7 @@ Settings are stored as JSON at
       "y": null,
       "muted": false,
       "enabled": true,
+      "session": "Main",
       "obsSources": ["GAME SCREEN"],
       "regions": []
     },
@@ -228,6 +234,7 @@ Settings are stored as JSON at
       "y": null,
       "muted": true,
       "enabled": true,
+      "session": "Main",
       "obsSources": ["CHAT CAPTURE"],
       "regions": [
         {
@@ -251,7 +258,6 @@ Settings are stored as JSON at
 
 | Field | Meaning |
 | --- | --- |
-| `showGrips` | Show the grip bars above the windows. |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `obs` | OBS WebSocket connection: `enabled`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
@@ -262,7 +268,7 @@ Settings are stored as JSON at
 | `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains; `enabled` false hides it in OBS and stops maintenance. |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
-| `session` | `shared` (default) or `separate`; a separate window has its own cookies and storage. |
+| `session` | Session group name (default `Main`). Windows with the same name share cookies and storage. |
 
 ## Releasing a new version
 
@@ -298,12 +304,11 @@ npm start
 ```
 src/main.js            Electron main process: windows, menu, IPC, permissions
 src/config.js          Config load/save/validation
-src/grips.js           Grip bar windows that move their view when dragged
 src/obs.js             OBS WebSocket bridge: keeps OBS sources pointed at the windows
 src/preload.js         Bridge between the control panel page and the main process
-src/grip-preload.js    Bridge between a grip page and the main process
+src/bar-preload.js     Bridge between a window's bar page and the main process
 src/control/           Control panel page (HTML, CSS, JS)
-src/grip/              Grip bar page (HTML, CSS, JS); add future per-window controls here
+src/bar/               The bar at the top of each window (HTML, CSS, JS); add per-window controls here
 build/icon.svg         App icon source; build/icon.png is generated from it
 ```
 

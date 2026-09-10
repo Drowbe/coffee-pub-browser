@@ -25,13 +25,12 @@ body {
 }
 
 .bar {
-  height: 100%;
+  height: 28px; /* must match BAR_HEIGHT in src/main.js */
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  border: 1px solid var(--border);
-  border-bottom: none;
+  border-bottom: 1px solid var(--border);
   cursor: grab;
   -webkit-app-region: drag;
   outline: none;
@@ -42,12 +41,7 @@ body {
 }
 
 .bar:focus-visible {
-  border-color: var(--accent);
-}
-
-.bar.overlay {
-  border-bottom: 1px solid var(--border);
-  opacity: 0.92;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .bar:active {

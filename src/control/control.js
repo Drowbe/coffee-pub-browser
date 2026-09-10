@@ -8,7 +8,6 @@ const viewTabsEl = $('view-tabs');
 const template = $('view-template');
 const saveStateEl = $('save-state');
 const openOnLaunchEl = $('open-on-launch');
-const showGripsEl = $('show-grips');
 const menuBarIconEl = $('menu-bar-icon');
 const hideDockIconEl = $('hide-dock-icon');
 const arrangeDisplayEl = $('arrange-display');
@@ -161,8 +160,8 @@ function applyConfig(next) {
     config.views.every((v, i) => v.id === next.views[i].id && v.label === next.views[i].label);
   config = next;
   openOnLaunchEl.checked = config.openOnLaunch;
-  showGripsEl.checked = config.showGrips;
   menuBarIconEl.checked = config.menuBarIcon;
+  renderSessionGroups();
   hideDockIconEl.checked = config.hideDockIcon;
   hideDockIconEl.disabled = !config.menuBarIcon;
   if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
@@ -176,6 +175,17 @@ function applyConfig(next) {
     if (card && !isEditing(card)) fillCard(card, view);
   }
   renderLabelWarnings();
+}
+
+function renderSessionGroups() {
+  const list = $('session-groups');
+  list.textContent = '';
+  const names = new Set(['Main', ...config.views.map((v) => v.session).filter(Boolean)]);
+  for (const name of names) {
+    const option = document.createElement('option');
+    option.value = name;
+    list.appendChild(option);
+  }
 }
 
 function renderLabelWarnings() {
@@ -281,7 +291,10 @@ function renderStatus() {
 
     const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
     const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
-    card.querySelector('[data-status="title"]').textContent = `Coffee Pub Browser - ${view.label}  ·  ${size}${captured}`;
+    card.querySelector('[data-status="title"]').textContent = `Coffee Pub Browser - ${view.label}  ·  page ${size}${captured}`;
+    card.querySelector('[data-status="crop"]').textContent = s.open
+      ? `The window has a ${s.barHeight} pt bar above the page. Linked OBS sources get a crop of ${s.cropTop} px at the top automatically; for a source you manage yourself, crop the top by ${s.cropTop} px in OBS.`
+      : 'Each window has a bar above the page that the app crops out of linked OBS sources.';
 
     renderSources(card, view, s, o, connected);
     renderRegions(card, view, s, o, connected);
@@ -361,43 +374,52 @@ function renderSources(card, view, s, o, connected) {
   create.title = s.open ? '' : 'Start the window first';
 }
 
+const REGION_NUMBER_FIELDS = new Set(['x', 'y', 'width', 'height']);
+const regionTemplate = $('region-template');
+const regionSaveTimers = new Map();
+
+function regionCardFor(card, region) {
+  let el = card.querySelector(`.region-card[data-region="${region.id}"]`);
+  if (el) return el;
+  el = regionTemplate.content.firstElementChild.cloneNode(true);
+  el.dataset.region = region.id;
+  for (const radio of el.querySelectorAll('[data-rfield="mode"]')) radio.name = `mode-${card.dataset.viewId}-${region.id}`;
+  el.addEventListener('input', onRegionInput);
+  el.addEventListener('change', onRegionInput);
+  card.querySelector('[data-role="region-list"]').appendChild(el);
+  return el;
+}
+
+function fillRegionCard(el, region) {
+  for (const input of el.querySelectorAll('[data-rfield]')) {
+    const field = input.dataset.rfield;
+    if (field === 'enabled') input.checked = region.enabled;
+    else if (field === 'mode') input.checked = input.value === region.mode;
+    else input.value = region[field] === undefined || region[field] === null ? '' : String(region[field]);
+  }
+  el.classList.toggle('disabled', !region.enabled);
+  el.querySelector('[data-role="selector-row"]').hidden = region.mode !== 'selector';
+}
+
 function renderRegions(card, view, s, o, connected) {
   const list = card.querySelector('[data-role="region-list"]');
-  list.textContent = '';
+  const keep = new Set(view.regions.map((r) => r.id));
+  for (const el of [...list.querySelectorAll('.region-card')]) {
+    if (!keep.has(el.dataset.region)) el.remove();
+  }
   for (const region of view.regions) {
-    const li = document.createElement('li');
-    li.className = 'region';
-    li.dataset.region = region.id;
-    if (!region.enabled) li.classList.add('disabled');
+    const el = regionCardFor(card, region);
+    if (!isEditing(el)) fillRegionCard(el, region);
 
-    const enabled = document.createElement('input');
-    enabled.type = 'checkbox';
-    enabled.checked = region.enabled;
-    enabled.dataset.action = 'toggle-region';
-    enabled.title = region.enabled ? 'Enabled: the app maintains this region in OBS' : 'Disabled: hidden in OBS and not maintained';
-    li.appendChild(enabled);
-
-    const name = document.createElement('span');
-    name.className = 'region-name';
-    name.textContent = region.name;
-    li.appendChild(name);
-
-    const geom = document.createElement('span');
-    geom.className = 'region-geom';
-    geom.textContent =
-      (region.mode === 'selector' ? `${region.selector || '(no selector)'}  ·  ` : '') +
-      `${region.x}, ${region.y}  ·  ${region.width} × ${region.height}`;
-    li.appendChild(geom);
-
-    const actions = document.createElement('span');
-    actions.className = 'region-actions';
+    const obsEl = el.querySelector('[data-role="region-obs"]');
+    obsEl.textContent = '';
     if (connected) {
       const exists = region.obsSource && o.inputs.includes(region.obsSource);
       if (exists) {
-        actions.appendChild(makeChip(region.obsSource, { title: 'OBS source' }));
-        actions.appendChild(makeSmallButton('Remove from OBS', 'remove-region-source', { danger: true, title: 'Delete this source in OBS' }));
+        obsEl.appendChild(makeChip(region.obsSource, { title: 'OBS source' }));
+        obsEl.appendChild(makeSmallButton('Remove from OBS', 'remove-region-source', { danger: true, title: 'Delete this source in OBS' }));
       } else {
-        actions.appendChild(
+        obsEl.appendChild(
           makeSmallButton('Add to OBS', 'create-region-source', {
             disabled: !s.open,
             title: s.open
@@ -412,17 +434,68 @@ function renderRegions(card, view, s, o, connected) {
       const label = document.createElement('span');
       label.className = 'region-source-name';
       label.textContent = region.obsSource;
-      actions.appendChild(label);
+      obsEl.appendChild(label);
+    } else {
+      const label = document.createElement('span');
+      label.className = 'hint';
+      label.textContent = 'connect to OBS to add a source';
+      obsEl.appendChild(label);
     }
-    actions.appendChild(makeSmallButton('Edit', 'edit-region'));
-    actions.appendChild(makeSmallButton('Delete', 'delete-region', { danger: true }));
-    li.appendChild(actions);
-    list.appendChild(li);
+    el.querySelector('[data-action="pick-region"]').disabled = !s.open;
+    el.querySelector('[data-action="measure-region"]').disabled = !s.open;
+    el.querySelector('[data-role="region-note"]').textContent = s.open ? '' : 'Start the window to use the snapshot or Measure.';
   }
-  list.hidden = view.regions.length === 0;
   const add = card.querySelector('[data-action="add-region"]');
   add.disabled = !s.open;
   add.title = s.open ? '' : 'Start the window first';
+}
+
+function readRegionCard(el, region) {
+  const next = { ...region };
+  for (const input of el.querySelectorAll('[data-rfield]')) {
+    const field = input.dataset.rfield;
+    if (field === 'enabled') continue; // handled through setRegionEnabled
+    if (field === 'mode') {
+      if (input.checked) next.mode = input.value;
+    } else if (REGION_NUMBER_FIELDS.has(field)) {
+      next[field] = Number(input.value);
+    } else {
+      next[field] = input.value;
+    }
+  }
+  return next;
+}
+
+async function onRegionInput(event) {
+  if (!event.target.matches('[data-rfield]')) return;
+  const el = event.currentTarget;
+  const card = el.closest('.view');
+  const viewId = card.dataset.viewId;
+  const view = config.views.find((v) => v.id === viewId);
+  const region = view && view.regions.find((r) => r.id === el.dataset.region);
+  if (!region) return;
+  if (event.target.dataset.rfield === 'enabled') {
+    if (event.type !== 'change') return;
+    try {
+      await api.setRegionEnabled(viewId, region.id, event.target.checked);
+    } catch (err) {
+      reportError(err);
+    }
+    return;
+  }
+  Object.assign(region, readRegionCard(el, region));
+  el.querySelector('[data-role="selector-row"]').hidden = region.mode !== 'selector';
+  clearTimeout(regionSaveTimers.get(region.id));
+  regionSaveTimers.set(
+    region.id,
+    setTimeout(async () => {
+      try {
+        await api.saveRegion(viewId, region);
+      } catch (err) {
+        reportError(err);
+      }
+    }, 400),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -469,10 +542,11 @@ async function onCardClick(event) {
   }
   const button = event.target.closest('[data-action]');
   if (!button) return;
+  if (event.target.matches('[data-rfield]')) return; // region inputs are handled by onRegionInput
   const regionEl = event.target.closest('[data-region]');
   const regionId = regionEl ? regionEl.dataset.region : null;
   const region = regionId ? view.regions.find((r) => r.id === regionId) : null;
-  if (button.dataset.action !== 'toggle-region') await flushSave();
+  await flushSave();
   const s = status.views.find((v) => v.id === id) || { open: false };
   try {
     switch (button.dataset.action) {
@@ -501,19 +575,44 @@ async function onCardClick(event) {
           await api.removeView(id);
         }
         break;
-      case 'add-region':
-        await openPicker(id, null);
+      case 'add-region': {
+        const st = status.views.find((v) => v.id === id) || {};
+        const w = st.width || view.width;
+        const h = st.height || view.height;
+        await api.saveRegion(id, {
+          name: `Region ${view.regions.length + 1}`,
+          mode: 'rect',
+          x: 0,
+          y: 0,
+          width: Math.max(1, Math.round(w / 2)),
+          height: Math.max(1, Math.round(h / 2)),
+        });
         break;
-      case 'edit-region':
+      }
+      case 'pick-region':
         await openPicker(id, region);
         break;
+      case 'measure-region': {
+        const el = regionEl;
+        const out = el.querySelector('[data-role="measure-out"]');
+        const selector = el.querySelector('[data-rfield="selector"]').value;
+        const rect = await api.measureView(id, selector).catch(() => null);
+        if (!rect) {
+          out.textContent = 'Element not found in the page.';
+          out.className = 'field-warning';
+          break;
+        }
+        out.textContent = `Found: ${rect.x}, ${rect.y}  ·  ${rect.width} × ${rect.height}`;
+        out.className = 'hint';
+        for (const key of ['x', 'y', 'width', 'height']) el.querySelector(`[data-rfield="${key}"]`).value = String(rect[key]);
+        Object.assign(region, rect, { mode: 'selector', selector });
+        await api.saveRegion(id, region);
+        break;
+      }
       case 'delete-region':
         if (region && window.confirm(`Delete region "${region.name}"? Its OBS source, if any, stays in OBS.`)) {
           await api.removeRegion(id, regionId);
         }
-        break;
-      case 'toggle-region':
-        await api.setRegionEnabled(id, regionId, button.checked);
         break;
       case 'create-region-source':
         await api.obsCreateRegionSource(id, regionId);
@@ -553,7 +652,6 @@ async function flushSave() {
   if (!isDirty()) return;
   try {
     config.openOnLaunch = openOnLaunchEl.checked;
-    config.showGrips = showGripsEl.checked;
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
     if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
@@ -581,10 +679,6 @@ arrangeDisplayEl.addEventListener('change', () => {
   scheduleSave();
 });
 for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl]) el.addEventListener('change', scheduleSave);
-showGripsEl.addEventListener('change', async () => {
-  await flushSave();
-  await api.setShowGrips(showGripsEl.checked);
-});
 $('clear-session').addEventListener('click', () => api.clearSession());
 $('reveal-config').addEventListener('click', () => api.revealConfig());
 $('reset-config').addEventListener('click', async () => {
@@ -646,28 +740,20 @@ api.onStatus((next) => {
 const picker = {
   el: $('picker'),
   title: $('picker-title'),
+  nameEl: $('picker-region-name'),
   img: $('picker-img'),
   wrap: $('snapshot-wrap'),
   sel: $('picker-sel'),
-  name: $('region-name'),
-  selectorField: $('selector-field'),
-  selector: $('region-selector'),
-  measureWarning: $('measure-warning'),
-  measureResult: $('measure-result'),
   x: $('region-x'),
   y: $('region-y'),
   w: $('region-w'),
   h: $('region-h'),
   statusEl: $('picker-status'),
   viewId: null,
-  regionId: null,
+  region: null,
   size: { width: 1, height: 1 },
   drag: null,
 };
-
-function pickerMode() {
-  return document.querySelector('input[name="region-mode"]:checked').value;
-}
 
 function pickerRect() {
   return {
@@ -711,35 +797,35 @@ async function loadSnapshot() {
       picker.img.onerror = resolve;
       picker.img.src = snap.dataUrl;
     });
-    picker.statusEl.textContent = `Window is ${snap.width} × ${snap.height}.`;
+    picker.statusEl.textContent = `Page is ${snap.width} × ${snap.height}.`;
   } catch (err) {
     picker.statusEl.textContent = String(err.message).replace(/^.*Error: /, '');
   }
   drawSelection();
 }
 
+// Open the snapshot picker for an existing region; saving updates its rectangle.
 async function openPicker(viewId, region) {
+  if (!region) return;
   const view = config.views.find((v) => v.id === viewId);
   picker.viewId = viewId;
-  picker.regionId = region ? region.id : null;
-  picker.title.textContent = region ? `Edit region on ${view.label}` : `New region on ${view.label}`;
-  picker.name.value = region ? region.name : `Region ${view.regions.length + 1}`;
-  document.querySelector(`input[name="region-mode"][value="${region ? region.mode : 'rect'}"]`).checked = true;
-  picker.selector.value = region ? region.selector : '';
-  picker.measureWarning.hidden = true;
-  picker.measureResult.hidden = true;
-  picker.selectorField.hidden = pickerMode() !== 'selector';
+  picker.region = region;
+  picker.title.textContent = `Pick "${region.name}" on ${view.label}`;
+  picker.nameEl.textContent =
+    region.mode === 'selector'
+      ? 'This region follows a CSS selector; the rectangle you pick here is replaced on the next sync unless you switch it to Rectangle.'
+      : 'Drag a box on the snapshot or adjust the numbers, then save.';
   picker.sel.hidden = true;
   picker.img.removeAttribute('src');
   picker.el.hidden = false;
   await loadSnapshot();
-  setPickerRect(region || { x: 0, y: 0, width: Math.round(picker.size.width / 2), height: Math.round(picker.size.height / 2) });
-  picker.name.focus();
+  setPickerRect(region);
 }
 
 function closePicker() {
   picker.el.hidden = true;
   picker.viewId = null;
+  picker.region = null;
   picker.drag = null;
 }
 
@@ -751,28 +837,9 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !picker.el.hidden) closePicker();
 });
 $('picker-refresh').addEventListener('click', loadSnapshot);
-for (const radio of document.querySelectorAll('input[name="region-mode"]')) {
-  radio.addEventListener('change', () => {
-    picker.selectorField.hidden = pickerMode() !== 'selector';
-  });
-}
 for (const input of [picker.x, picker.y, picker.w, picker.h]) input.addEventListener('input', drawSelection);
 window.addEventListener('resize', () => {
   if (!picker.el.hidden) drawSelection();
-});
-
-$('region-measure').addEventListener('click', async () => {
-  picker.measureWarning.hidden = true;
-  picker.measureResult.hidden = true;
-  const rect = await api.measureView(picker.viewId, picker.selector.value).catch(() => null);
-  if (!rect) {
-    picker.measureWarning.textContent = 'Element not found in the page.';
-    picker.measureWarning.hidden = false;
-    return;
-  }
-  setPickerRect(rect);
-  picker.measureResult.textContent = `Found: ${rect.x}, ${rect.y}  ·  ${rect.width} × ${rect.height}`;
-  picker.measureResult.hidden = false;
 });
 
 function snapshotPoint(event) {
@@ -799,26 +866,10 @@ window.addEventListener('mouseup', () => {
 });
 
 $('picker-save').addEventListener('click', async () => {
-  const mode = pickerMode();
-  const region = {
-    id: picker.regionId || undefined,
-    name: picker.name.value.trim() || 'Region',
-    mode,
-    selector: mode === 'selector' ? picker.selector.value.trim() : '',
-    ...pickerRect(),
-  };
-  if (mode === 'selector' && !region.selector) {
-    picker.measureWarning.textContent = 'Enter a selector.';
-    picker.measureWarning.hidden = false;
-    return;
-  }
-  const existing = picker.regionId
-    ? (config.views.find((v) => v.id === picker.viewId) || { regions: [] }).regions.find((r) => r.id === picker.regionId)
-    : null;
-  if (existing) {
-    region.obsSource = existing.obsSource;
-    region.enabled = existing.enabled;
-  }
+  if (!picker.region) return;
+  const view = config.views.find((v) => v.id === picker.viewId);
+  const current = view ? view.regions.find((r) => r.id === picker.region.id) : null;
+  const region = { ...(current || picker.region), ...pickerRect() };
   try {
     await api.saveRegion(picker.viewId, region);
     closePicker();

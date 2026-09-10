@@ -688,3 +688,108 @@ select:focus {
 .region-source-name {
   color: var(--text-dim);
 }
+
+/* Region cards */
+.regions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.region-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.region-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.region-card.disabled .region-body {
+  opacity: 0.55;
+}
+
+.region-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.region-name-input {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 9px;
+  font: inherit;
+  font-weight: 600;
+}
+
+.region-name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.region-obs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.region-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-label {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.selector-row input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 9px;
+  font: inherit;
+}
+
+.selector-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.region-card .field input {
+  background: var(--bg-card);
+}

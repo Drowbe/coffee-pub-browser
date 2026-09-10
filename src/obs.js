@@ -214,7 +214,7 @@ class ObsBridge extends EventEmitter {
    * Point every linked OBS input at the current window ID of its app window
    * and detect inputs that already point at one of our windows.
    *
-   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[],
+   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[], crop: object|null,
    *   regions: Array<{name: string, obsSource: string, crop: {left: number, top: number, right: number, bottom: number}}>}>} views
    * @returns {Promise<{pointed: string[], cropped: string[], missing: string[], detected: Array<{id: string, input: string}>}>}
    */
@@ -253,6 +253,14 @@ class ObsBridge extends EventEmitter {
         if (current && current.window === windowId) continue;
         await this.pointInput(name, windowId);
         report.pointed.push(name);
+      }
+      // Window-level sources get a crop that removes the app's own bar.
+      if (view.crop && windowId) {
+        for (const name of view.sources) {
+          if (!known.has(name)) continue;
+          await this.ensureCropFilter(name, view.crop);
+          report.cropped.push(name);
+        }
       }
       for (const region of view.regions) {
         if (!region.obsSource || !known.has(region.obsSource) || !region.crop) continue;
