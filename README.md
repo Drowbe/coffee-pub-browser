@@ -253,6 +253,25 @@ Settings are stored as JSON at
 
 Pushing a tag that starts with `v` from your machine triggers the same release build.
 
+## Setting up a Mac for development
+
+`scripts/mac-dev-setup.sh` installs Homebrew, git, fnm with Node 22, GitHub Desktop and
+VS Code, creates `~/Developer`, clones every Coffee Pub repository into it and runs
+`npm install` for this app. It is safe to re-run; each step skips what is already done.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-browser/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
+bash ~/mac-dev-setup.sh
+```
+
+Afterwards, run the app from source with:
+
+```bash
+cd ~/Developer/coffee-pub-browser
+git pull
+npm start
+```
+
 ## Project layout
 
 ```
