@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 4;
+const CONFIG_VERSION = 5;
 
 const LIMITS = {
   minSize: 100,
@@ -34,6 +34,7 @@ function defaultView(index) {
     y: null,
     muted: seed ? seed.muted : true,
     enabled: true,
+    session: 'shared',
     obsSources: [],
     regions: [],
   };
@@ -60,6 +61,7 @@ function sanitizeRegion(input, index, taken) {
     width: Math.max(1, toInt(src.width, 100)),
     height: Math.max(1, toInt(src.height, 100)),
     obsSource: typeof src.obsSource === 'string' ? src.obsSource.trim().slice(0, 200) : '',
+    enabled: src.enabled === undefined ? true : Boolean(src.enabled),
   };
 }
 
@@ -78,6 +80,8 @@ function defaultConfig() {
     version: CONFIG_VERSION,
     openOnLaunch: true,
     showGrips: true,
+    menuBarIcon: true,
+    hideDockIcon: false,
     obs: defaultObs(),
     views: [defaultView(0), defaultView(1)],
   };
@@ -125,6 +129,7 @@ function sanitizeView(input, index) {
     y,
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
+    session: src.session === 'separate' ? 'separate' : 'shared',
     obsSources: sanitizeSources(src.obsSources),
     regions: sanitizeRegions(src.regions),
   };
@@ -178,6 +183,8 @@ function sanitizeConfig(input) {
     version: CONFIG_VERSION,
     openOnLaunch: src.openOnLaunch === undefined ? defaults.openOnLaunch : Boolean(src.openOnLaunch),
     showGrips: src.showGrips === undefined ? defaults.showGrips : Boolean(src.showGrips),
+    menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
+    hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
     obs: sanitizeObs(src.obs),
     views,
   };
@@ -258,23 +265,27 @@ class ConfigStore {
     this.updateView(viewId, { regions: view.regions.filter((r) => r.id !== regionId) });
   }
 
-  // Grow or shrink the list of views to `count`. New views get defaults;
-  // removed views are dropped from the end. Returns the ids that were removed.
-  setViewCount(count) {
-    const target = clamp(toInt(count, this.data.views.length), LIMITS.minViews, LIMITS.maxViews);
-    const views = this.data.views.slice(0, target);
-    const removed = this.data.views.slice(target).map((v) => v.id);
+  // Append a new view with defaults. Returns it, or null when at the limit.
+  addView() {
+    const views = this.data.views.slice();
+    if (views.length >= LIMITS.maxViews) return null;
     const taken = new Set(views.map((v) => v.id));
-    while (views.length < target) {
-      const view = defaultView(views.length);
-      let id = view.id;
-      let n = 2;
-      while (taken.has(id)) id = `${view.id}-${n++}`;
-      taken.add(id);
-      views.push({ ...view, id });
-    }
+    const view = defaultView(views.length);
+    let id = view.id;
+    let n = 2;
+    while (taken.has(id)) id = `${view.id}-${n++}`;
+    views.push({ ...view, id });
+    const saved = this.save({ ...this.data, views });
+    return saved.views[saved.views.length - 1];
+  }
+
+  // Remove a view by id. The last remaining view cannot be removed.
+  removeView(id) {
+    if (this.data.views.length <= LIMITS.minViews) return false;
+    const views = this.data.views.filter((v) => v.id !== id);
+    if (views.length === this.data.views.length) return false;
     this.save({ ...this.data, views });
-    return removed;
+    return true;
   }
 }
 

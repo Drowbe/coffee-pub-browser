@@ -18,84 +18,89 @@
     <div class="topbar-actions">
       <button id="open-all" class="btn btn-primary" type="button">Start All</button>
       <button id="close-all" class="btn" type="button">Stop All</button>
+      <button id="collapse" class="btn" type="button" title="Slide the windows to the edge of the screen; OBS keeps capturing them">Collapse</button>
     </div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-tab="general" type="button">General</button>
+    <button class="tab" data-tab="obs" type="button">OBS <span class="dot" id="obs-dot"></span></button>
+    <span id="view-tabs" class="view-tabs"></span>
+    <button class="tab tab-add" data-tab="add" type="button" title="Add a window">+</button>
+  </nav>
+
   <main>
-    <section class="card global">
-      <h2>Layout &amp; Startup</h2>
-
-      <div class="row">
-        <label class="field field-inline">
-          <span>Number of windows</span>
-          <span class="stepper">
-            <button id="count-down" class="btn btn-step" type="button" aria-label="Fewer windows">&minus;</button>
-            <output id="count-value">2</output>
-            <button id="count-up" class="btn btn-step" type="button" aria-label="More windows">+</button>
-          </span>
-        </label>
-        <label class="field field-inline">
-          <span>Display</span>
-          <select id="arrange-display"></select>
-        </label>
-        <button id="arrange" class="btn" type="button" title="Windows go left to right from the top-left corner, wrapping to a new row when they no longer fit">Auto-arrange on display</button>
-      </div>
-
-      <div class="row checks-column">
-        <label class="check">
-          <input id="open-on-launch" type="checkbox">
-          <span>Start the windows when the app launches</span>
-        </label>
-        <label class="check">
-          <input id="show-grips" type="checkbox">
-          <span>Show grip bars above the windows (Cmd+G). Drag a grip to move its window; arrow keys resize it. Grips are never captured by OBS.</span>
-        </label>
-      </div>
-      <p class="hint" id="retina-hint"></p>
-
-      <div class="row session-row">
-        <span class="hint">All windows share one Foundry login.</span>
-        <button id="clear-session" class="btn btn-danger" type="button">Sign out (clear cookies)</button>
-        <button id="reveal-config" class="btn" type="button">Show config file</button>
-        <button id="reset-config" class="btn" type="button">Reset to defaults</button>
+    <section class="tab-panel" id="tab-general">
+      <div class="card">
+        <h2>Layout &amp; Startup</h2>
+        <div class="row">
+          <label class="field field-inline">
+            <span>Display</span>
+            <select id="arrange-display"></select>
+          </label>
+          <button id="arrange" class="btn" type="button" title="Windows go left to right from the top-left corner, wrapping to a new row when they no longer fit">Auto-arrange on display</button>
+        </div>
+        <div class="row checks-column">
+          <label class="check">
+            <input id="open-on-launch" type="checkbox">
+            <span>Start the windows when the app launches</span>
+          </label>
+          <label class="check">
+            <input id="show-grips" type="checkbox">
+            <span>Show grip bars above the windows (Cmd+G). Drag a grip to move its window; arrow keys resize it. Grips are never captured by OBS.</span>
+          </label>
+          <label class="check">
+            <input id="menu-bar-icon" type="checkbox">
+            <span>Show a menu bar icon with Start, Stop, Collapse and Sync shortcuts</span>
+          </label>
+          <label class="check check-indent">
+            <input id="hide-dock-icon" type="checkbox">
+            <span>Hide the Dock icon (menu bar only)</span>
+          </label>
+        </div>
+        <p class="hint" id="retina-hint"></p>
+        <div class="row session-row">
+          <span class="hint">Windows set to the shared session log into Foundry together.</span>
+          <button id="clear-session" class="btn btn-danger" type="button">Sign out (clear cookies)</button>
+          <button id="reveal-config" class="btn" type="button">Show config file</button>
+          <button id="reset-config" class="btn" type="button">Reset to defaults</button>
+        </div>
       </div>
     </section>
 
-    <section class="card obs">
-      <div class="view-head">
-        <div class="view-head-left">
-          <h2>OBS</h2>
-          <span class="tag" id="obs-tag" hidden>CONNECTED</span>
+    <section class="tab-panel" id="tab-obs">
+      <div class="card obs">
+        <div class="view-head">
+          <div class="view-head-left">
+            <h2>OBS</h2>
+            <span class="tag" id="obs-tag" hidden>CONNECTED</span>
+          </div>
+          <div class="view-actions">
+            <button id="obs-connect" class="btn btn-primary" type="button">Connect</button>
+            <button id="obs-sync" class="btn" type="button">Sync sources</button>
+          </div>
         </div>
-        <div class="view-actions">
-          <button id="obs-connect" class="btn" type="button">Connect now</button>
-          <button id="obs-sync" class="btn" type="button">Sync sources</button>
+        <p class="hint">
+          Keeps your OBS window-capture sources pointed at these windows after every launch, so you never re-pick a window.
+          In OBS: Tools &gt; WebSocket Server Settings, enable the server and set a password.
+        </p>
+        <div class="row">
+          <label class="field field-inline">
+            <span>Host</span>
+            <input id="obs-host" type="text" size="14" spellcheck="false">
+          </label>
+          <label class="field field-inline">
+            <span>Port</span>
+            <input id="obs-port" type="number" min="1" max="65535" step="1" size="6">
+          </label>
+          <label class="field field-inline">
+            <span>Password</span>
+            <input id="obs-password" type="password" size="16" autocomplete="off" placeholder="not set">
+          </label>
+          <button id="obs-save-password" class="btn" type="button">Save password</button>
         </div>
+        <p class="hint" id="obs-status">Not connected.</p>
       </div>
-      <p class="hint">
-        Keeps your OBS window-capture sources pointed at these windows after every launch, so you never re-pick a window.
-        In OBS: Tools &gt; WebSocket Server Settings, enable the server and set a password.
-      </p>
-      <div class="row">
-        <label class="check">
-          <input id="obs-enabled" type="checkbox">
-          <span>Connect to OBS</span>
-        </label>
-        <label class="field field-inline">
-          <span>Host</span>
-          <input id="obs-host" type="text" size="14" spellcheck="false">
-        </label>
-        <label class="field field-inline">
-          <span>Port</span>
-          <input id="obs-port" type="number" min="1" max="65535" step="1" size="6">
-        </label>
-        <label class="field field-inline">
-          <span>Password</span>
-          <input id="obs-password" type="password" size="16" autocomplete="off" placeholder="not set">
-        </label>
-        <button id="obs-save-password" class="btn" type="button">Save password</button>
-      </div>
-      <p class="hint" id="obs-status">Not connected.</p>
     </section>
 
     <section id="views" class="views"></section>
@@ -107,7 +112,7 @@
   </footer>
 
   <template id="view-template">
-    <article class="card view">
+    <article class="card view tab-panel">
       <header class="view-head">
         <div class="view-head-left">
           <h2 class="view-title"></h2>
@@ -139,6 +144,14 @@
           <span>Height (px)</span>
           <input data-field="height" type="number" min="100" max="7680" step="1">
         </label>
+        <label class="field">
+          <span>Session</span>
+          <select data-field="session">
+            <option value="shared">Shared login</option>
+            <option value="separate">Separate login</option>
+          </select>
+          <small class="hint" data-role="session-note" hidden>Takes effect the next time this window starts.</small>
+        </label>
       </div>
 
       <div class="checks">
@@ -151,7 +164,7 @@
           <span class="details-key">OBS window name</span>
           <span class="details-value" data-status="title">-</span>
         </div>
-        <div class="details-row" data-role="obs-row">
+        <div class="details-row">
           <span class="details-key">OBS sources</span>
           <span class="details-value sources">
             <span class="chips" data-role="chips"></span>
@@ -168,6 +181,11 @@
             <button class="btn btn-small" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
           </span>
         </div>
+      </div>
+
+      <div class="row card-footer">
+        <span class="hint">Removing a window forgets its OBS links; the sources stay in OBS.</span>
+        <button class="btn btn-danger" data-action="remove-view" type="button">Remove window</button>
       </div>
     </article>
   </template>
@@ -201,10 +219,11 @@
           <div class="field" id="selector-field" hidden>
             <span>Selector</span>
             <div class="row">
-              <input id="region-selector" type="text" spellcheck="false" placeholder="#scoreboard">
+              <input id="region-selector" type="text" spellcheck="false" placeholder="#scoreboard or [data-item-id=&quot;party-health&quot;]">
               <button id="region-measure" class="btn btn-small" type="button">Measure</button>
             </div>
-            <small class="hint">The element is re-measured on every OBS sync, so the crop follows it.</small>
+            <small class="hint">A plain list of class names is accepted too. The element is re-measured on every OBS sync, so the crop follows it.</small>
+            <small class="hint" id="measure-result" hidden></small>
             <small class="field-warning" id="measure-warning" hidden>Element not found in the page.</small>
           </div>
           <div class="grid grid-2">

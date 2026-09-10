@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, Menu, Tray, nativeImage, session, dialog, safeStorage } = require('electron');
 const { ConfigStore, LIMITS, REGION_LIMITS } = require('./config');
 const { Grips } = require('./grips');
 const { ObsBridge } = require('./obs');
@@ -20,8 +20,26 @@ function readBuildInfo() {
 const BUILD_INFO = readBuildInfo();
 const APP_VERSION = require('../package.json').version;
 const REVISION = `v${APP_VERSION} (${BUILD_INFO.commit}${BUILD_INFO.dirty ? '+' : ''})`;
-// One shared, persistent session: logging into Foundry in either window logs in both.
+// The shared, persistent session: windows set to "shared" log in together.
+// Windows set to "separate" get their own partition (persist:view-<id>).
 const PARTITION = 'persist:coffeepub';
+const PARK_STRIP = 40; // points of a collapsed window left visible at the display edge
+
+function partitionFor(view) {
+  return view.session === 'separate' ? `persist:view-${view.id}` : PARTITION;
+}
+
+// CSS selector helper: a bare list of class names ("a b") becomes ".a.b".
+function normalizeSelector(text) {
+  if (typeof text !== 'string') return '';
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (/[.#\[\]>:+~*,="']/.test(trimmed)) return trimmed;
+  return trimmed
+    .split(/\s+/)
+    .map((c) => `.${c}`)
+    .join('');
+}
 
 app.setName(APP_NAME);
 
@@ -41,6 +59,11 @@ const viewWindows = new Map();
 const grips = new Grips({
   isEnabled: () => configStore.get().showGrips,
   onViewMoved: (id, x, y) => {
+    if (parked.has(id)) {
+      // Dragging a collapsed window out of its parking spot un-parks it.
+      parked.delete(id);
+      if (parked.size === 0) collapsed = false;
+    }
     configStore.updateView(id, { x, y });
     broadcastStatus();
   },
@@ -63,7 +86,12 @@ const PLACEHOLDER_URL =
   );
 /** @type {BrowserWindow | null} */
 let controlWindow = null;
+/** @type {Tray | null} */
+let tray = null;
 let quitting = false;
+// Collapsed windows: id -> position to restore on expand.
+const parked = new Map();
+let collapsed = false;
 
 // ---------------------------------------------------------------------------
 // OBS password (kept out of config.json, encrypted with the OS keychain)
@@ -152,6 +180,7 @@ function fullStatus() {
     displays: screen.getAllDisplays().map(displaySummary),
     config: configStore.get(),
     obs: { ...obs.status(), hasPassword: readObsPassword() !== '' },
+    collapsed,
   };
 }
 
@@ -159,6 +188,7 @@ function broadcastStatus() {
   if (isAlive(controlWindow)) {
     controlWindow.webContents.send('status', fullStatus());
   }
+  refreshTrayMenu();
 }
 
 function getView(id) {
@@ -185,8 +215,9 @@ function systemWindowId(win) {
 
 // Measure a page element inside a view window: { x, y, width, height } in
 // window points, or null when the element is not found.
-async function measureSelector(win, selector) {
-  if (!isAlive(win) || typeof selector !== 'string' || !selector.trim()) return null;
+async function measureSelector(win, rawSelector) {
+  const selector = normalizeSelector(rawSelector);
+  if (!isAlive(win) || !selector) return null;
   const code = `(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el) return null;
@@ -262,7 +293,7 @@ async function syncObs() {
       title: windowTitle(view),
       windowId: systemWindowId(win),
       sources: view.obsSources,
-      regions: regions.map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
+      regions: regions.filter((r) => r.enabled).map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
     });
   }
   const report = await obs.syncViews(views);
@@ -304,7 +335,7 @@ function createViewWindow(view) {
     backgroundColor: '#000000',
     show: false,
     webPreferences: {
-      partition: PARTITION,
+      partition: partitionFor(view),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -312,6 +343,7 @@ function createViewWindow(view) {
       spellcheck: false,
     },
   };
+  configureSession(partitionFor(view));
   if (Number.isInteger(view.x) && Number.isInteger(view.y)) {
     options.x = view.x;
     options.y = view.y;
@@ -355,7 +387,7 @@ function createViewWindow(view) {
   win.webContents.setAudioMuted(Boolean(view.muted));
 
   win.on('moved', () => {
-    if (!isAlive(win)) return;
+    if (!isAlive(win) || parked.has(view.id)) return;
     const [x, y] = win.getPosition();
     configStore.updateView(view.id, { x, y });
     broadcastStatus();
@@ -455,13 +487,48 @@ function arrangeViews(displayId) {
   broadcastStatus();
 }
 
-// Add or remove windows to match `count`. Removed windows are closed.
-function setViewCount(count) {
-  const removed = configStore.setViewCount(count);
-  removed.forEach(closeView);
+function addView() {
+  const view = configStore.addView();
+  if (!view) throw new Error(`At most ${LIMITS.maxViews} windows.`);
+  buildMenu();
+  broadcastStatus();
+  return view;
+}
+
+function removeView(id) {
+  closeView(id);
+  const removed = configStore.removeView(id);
+  if (!removed) throw new Error('The last window cannot be removed.');
+  parked.delete(id);
   buildMenu();
   broadcastStatus();
   return configStore.get();
+}
+
+// Slide every open window to the right edge of its display, leaving a thin
+// strip on screen so OBS keeps capturing it. Expand restores the positions.
+function collapseViews() {
+  for (const [id, win] of viewWindows) {
+    if (!isAlive(win) || parked.has(id)) continue;
+    const [x, y] = win.getPosition();
+    const area = screen.getDisplayMatching(win.getBounds()).workArea;
+    parked.set(id, { x, y });
+    win.setPosition(area.x + area.width - PARK_STRIP, y);
+  }
+  collapsed = true;
+  buildMenu();
+  broadcastStatus();
+}
+
+function expandViews() {
+  for (const [id, pos] of parked) {
+    const win = viewWindows.get(id);
+    if (isAlive(win)) win.setPosition(pos.x, pos.y);
+  }
+  parked.clear();
+  collapsed = false;
+  buildMenu();
+  broadcastStatus();
 }
 
 function setShowGrips(visible) {
@@ -588,6 +655,11 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+G',
           click: (item) => setShowGrips(item.checked),
         },
+        {
+          label: collapsed ? 'Expand Windows' : 'Collapse Windows to Edge',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: () => (collapsed ? expandViews() : collapseViews()),
+        },
         { type: 'separator' },
         {
           label: 'Reload Focused Window',
@@ -614,6 +686,65 @@ function buildMenu() {
 }
 
 // ---------------------------------------------------------------------------
+// Menu bar icon (optional)
+// ---------------------------------------------------------------------------
+
+function trayMenuTemplate() {
+  const views = configStore.get().views;
+  return [
+    { label: `${APP_NAME} ${REVISION}`, enabled: false },
+    { type: 'separator' },
+    { label: 'Show Control Panel', click: () => createControlWindow() },
+    { type: 'separator' },
+    ...views.map((view) => {
+      const open = isAlive(viewWindows.get(view.id));
+      return {
+        label: `${open ? 'Stop' : 'Start'} ${view.label}`,
+        enabled: open || Boolean(view.url),
+        click: () => (open ? closeView(view.id) : createViewWindow(getView(view.id))),
+      };
+    }),
+    { label: 'Start All', click: () => openAllViews() },
+    { label: 'Stop All', click: () => closeAllViews() },
+    { type: 'separator' },
+    {
+      label: collapsed ? 'Expand Windows' : 'Collapse Windows to Edge',
+      enabled: viewWindows.size > 0,
+      click: () => (collapsed ? expandViews() : collapseViews()),
+    },
+    {
+      label: 'Sync OBS Sources',
+      enabled: obs.connected,
+      click: () => syncObs().catch(() => {}),
+    },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ];
+}
+
+function refreshTrayMenu() {
+  if (tray && !tray.isDestroyed()) tray.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate()));
+}
+
+function setupTray() {
+  const { menuBarIcon, hideDockIcon } = configStore.get();
+  if (menuBarIcon && !tray) {
+    const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
+    icon.setTemplateImage(true);
+    tray = new Tray(icon);
+    tray.setToolTip(APP_NAME);
+    refreshTrayMenu();
+  } else if (!menuBarIcon && tray) {
+    tray.destroy();
+    tray = null;
+  }
+  if (process.platform === 'darwin' && app.dock) {
+    if (menuBarIcon && hideDockIcon) app.dock.hide();
+    else app.dock.show();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // IPC
 // ---------------------------------------------------------------------------
 
@@ -623,6 +754,7 @@ function registerIpc() {
     const saved = configStore.save(next);
     saved.views.forEach(applyViewSettings);
     grips.setVisible(saved.showGrips);
+    setupTray();
     buildMenu();
     broadcastStatus();
     return saved;
@@ -631,12 +763,16 @@ function registerIpc() {
     const saved = configStore.save({});
     saved.views.forEach(applyViewSettings);
     grips.setVisible(saved.showGrips);
+    setupTray();
     buildMenu();
     broadcastStatus();
     return saved;
   });
   ipcMain.handle('grips:set', (_event, visible) => setShowGrips(visible));
-  ipcMain.handle('views:setCount', (_event, count) => setViewCount(count));
+  ipcMain.handle('views:add', () => addView());
+  ipcMain.handle('views:remove', (_event, id) => removeView(id));
+  ipcMain.handle('views:collapse', () => collapseViews());
+  ipcMain.handle('views:expand', () => expandViews());
 
   // --- OBS ---
   ipcMain.handle('obs:setSettings', async (_event, settings) => {
@@ -692,10 +828,49 @@ function registerIpc() {
   });
   ipcMain.handle('regions:save', async (_event, id, region) => {
     getView(id);
-    const saved = configStore.saveRegion(id, region && typeof region === 'object' ? region : {});
+    const input = region && typeof region === 'object' ? { ...region } : {};
+    if (typeof input.selector === 'string') input.selector = normalizeSelector(input.selector);
+    const saved = configStore.saveRegion(id, input);
     scheduleObsSync();
     broadcastStatus();
     return saved;
+  });
+  ipcMain.handle('regions:setEnabled', async (_event, id, regionId, enabled) => {
+    const region = configStore.getRegion(id, regionId);
+    if (!region) throw new Error('Unknown region.');
+    const saved = configStore.saveRegion(id, { ...region, enabled: Boolean(enabled) });
+    if (obs.connected && saved.obsSource && obs.status().inputs.includes(saved.obsSource)) {
+      await obs.setSourceVisible(saved.obsSource, Boolean(enabled)).catch((err) => console.warn(`[obs] visibility: ${err.message}`));
+    }
+    scheduleObsSync();
+    broadcastStatus();
+    return saved;
+  });
+  ipcMain.handle('obs:recreateSource', async (_event, id, inputName) => {
+    const view = getView(id);
+    const windowId = systemWindowId(viewWindows.get(id));
+    if (!windowId) throw new Error('Start the window first so OBS can capture it.');
+    if (typeof inputName !== 'string' || !inputName) throw new Error('No source name.');
+    if (obs.status().inputs.includes(inputName)) throw new Error(`"${inputName}" already exists in OBS.`);
+    await obs.createInput(inputName, windowId);
+    if (!view.obsSources.includes(inputName)) {
+      configStore.updateView(id, { obsSources: [...view.obsSources, inputName] });
+    }
+    broadcastStatus();
+    return inputName;
+  });
+  ipcMain.handle('obs:removeSource', async (_event, inputName) => {
+    if (typeof inputName !== 'string' || !inputName) return;
+    if (obs.status().inputs.includes(inputName)) await obs.removeInput(inputName);
+    // Forget it everywhere.
+    for (const view of configStore.get().views) {
+      const obsSources = view.obsSources.filter((n) => n !== inputName);
+      const regions = view.regions.map((r) => (r.obsSource === inputName ? { ...r, obsSource: '' } : r));
+      if (obsSources.length !== view.obsSources.length || regions.some((r, i) => r !== view.regions[i])) {
+        configStore.updateView(view.id, { obsSources, regions });
+      }
+    }
+    broadcastStatus();
   });
   ipcMain.handle('regions:remove', (_event, id, regionId) => {
     configStore.removeRegion(id, regionId);
@@ -709,10 +884,14 @@ function registerIpc() {
     const win = viewWindows.get(id);
     const windowId = systemWindowId(win);
     if (!windowId) throw new Error('Start the window first so OBS can capture it.');
-    let name = `${view.label} - ${region.name}`;
     const taken = new Set(obs.status().inputs);
-    let n = 2;
-    while (taken.has(name)) name = `${view.label} - ${region.name} ${n++}`;
+    let name = region.obsSource || `${view.label} - ${region.name}`;
+    if (!region.obsSource) {
+      let n = 2;
+      while (taken.has(name)) name = `${view.label} - ${region.name} ${n++}`;
+    } else if (taken.has(name)) {
+      throw new Error(`"${name}" already exists in OBS.`);
+    }
     await obs.createInput(name, windowId);
     await obs.ensureCropFilter(name, cropFor(win, region));
     configStore.saveRegion(id, { ...region, obsSource: name });
@@ -772,9 +951,12 @@ function registerIpc() {
       detail: 'This clears cookies and site data for both windows. You will need to log in again.',
     });
     if (response !== 1) return false;
-    const ses = session.fromPartition(PARTITION);
-    await ses.clearStorageData();
-    await ses.clearCache();
+    const partitions = new Set([PARTITION, ...configStore.get().views.map(partitionFor)]);
+    for (const partition of partitions) {
+      const ses = session.fromPartition(partition);
+      await ses.clearStorageData();
+      await ses.clearCache();
+    }
     for (const win of viewWindows.values()) {
       if (isAlive(win)) win.webContents.reload();
     }
@@ -786,8 +968,11 @@ function registerIpc() {
 // Session permissions
 // ---------------------------------------------------------------------------
 
-function configureSession() {
-  const ses = session.fromPartition(PARTITION);
+const configuredPartitions = new Set();
+function configureSession(partition = PARTITION) {
+  if (configuredPartitions.has(partition)) return;
+  configuredPartitions.add(partition);
+  const ses = session.fromPartition(partition);
   const allowed = new Set(['media', 'notifications', 'fullscreen', 'pointerLock', 'clipboard-read', 'clipboard-sanitized-write']);
   const configuredOrigins = () =>
     new Set(
@@ -828,6 +1013,7 @@ if (!app.requestSingleInstanceLock()) {
     configureSession();
     registerIpc();
     buildMenu();
+    setupTray();
     createControlWindow();
     if (configStore.get().openOnLaunch) openAllViews();
     obs.start().catch(() => {});

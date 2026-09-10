@@ -2,29 +2,33 @@
 
 const api = window.coffeePub;
 
-const viewsEl = document.getElementById('views');
-const template = document.getElementById('view-template');
-const saveStateEl = document.getElementById('save-state');
-const openOnLaunchEl = document.getElementById('open-on-launch');
-const showGripsEl = document.getElementById('show-grips');
-const arrangeDisplayEl = document.getElementById('arrange-display');
-const retinaHintEl = document.getElementById('retina-hint');
-const countValueEl = document.getElementById('count-value');
-const countDownEl = document.getElementById('count-down');
-const countUpEl = document.getElementById('count-up');
-const obsEnabledEl = document.getElementById('obs-enabled');
-const obsHostEl = document.getElementById('obs-host');
-const obsPortEl = document.getElementById('obs-port');
-const obsPasswordEl = document.getElementById('obs-password');
-const obsStatusEl = document.getElementById('obs-status');
-const obsTagEl = document.getElementById('obs-tag');
+const $ = (id) => document.getElementById(id);
+const viewsEl = $('views');
+const viewTabsEl = $('view-tabs');
+const template = $('view-template');
+const saveStateEl = $('save-state');
+const openOnLaunchEl = $('open-on-launch');
+const showGripsEl = $('show-grips');
+const menuBarIconEl = $('menu-bar-icon');
+const hideDockIconEl = $('hide-dock-icon');
+const arrangeDisplayEl = $('arrange-display');
+const retinaHintEl = $('retina-hint');
+const obsHostEl = $('obs-host');
+const obsPortEl = $('obs-port');
+const obsPasswordEl = $('obs-password');
+const obsStatusEl = $('obs-status');
+const obsTagEl = $('obs-tag');
+const obsDotEl = $('obs-dot');
+const obsConnectEl = $('obs-connect');
+const collapseEl = $('collapse');
 
 let config = null;
-let status = { views: [], displays: [], obs: { state: 'disabled', inputs: [] } };
+let status = { views: [], displays: [], obs: { state: 'disabled', inputs: [] }, collapsed: false };
 let limits = { minViews: 1, maxViews: 5 };
 /** @type {Map<string, HTMLElement>} */
 const cards = new Map();
 let saveTimer = null;
+let activeTab = 'general';
 
 const NUMBER_FIELDS = new Set(['width', 'height']);
 const BOOL_FIELDS = new Set(['enabled', 'muted']);
@@ -41,6 +45,78 @@ function isDirty() {
 function isEditing(el) {
   return el.contains(document.activeElement);
 }
+
+function reportError(err) {
+  setSaveState(String((err && err.message) || err).replace(/^.*Error: /, ''), 'error');
+}
+
+// ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+function rememberTab(name) {
+  try {
+    localStorage.setItem('activeTab', name);
+  } catch (err) {
+    // ignore
+  }
+}
+
+function recallTab() {
+  try {
+    return localStorage.getItem('activeTab') || 'general';
+  } catch (err) {
+    return 'general';
+  }
+}
+
+function selectTab(name) {
+  if (name.startsWith('view:') && !config.views.some((v) => `view:${v.id}` === name)) name = 'general';
+  activeTab = name;
+  rememberTab(name);
+  for (const tab of document.querySelectorAll('.tab')) {
+    tab.classList.toggle('active', tab.dataset.tab === name);
+  }
+  $('tab-general').hidden = name !== 'general';
+  $('tab-obs').hidden = name !== 'obs';
+  for (const [id, card] of cards) card.hidden = name !== `view:${id}`;
+}
+
+function renderTabs() {
+  viewTabsEl.textContent = '';
+  for (const view of config.views) {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'tab';
+    tab.dataset.tab = `view:${view.id}`;
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.dataset.viewDot = view.id;
+    tab.appendChild(dot);
+    tab.append(view.label);
+    viewTabsEl.appendChild(tab);
+  }
+  $('tabs').querySelector('.tab-add').hidden = config.views.length >= limits.maxViews;
+  selectTab(activeTab);
+}
+
+$('tabs').addEventListener('click', async (event) => {
+  const tab = event.target.closest('.tab');
+  if (!tab) return;
+  if (tab.dataset.tab === 'add') {
+    await flushSave();
+    try {
+      const view = await api.addView();
+      // The status broadcast may have re-rendered the tabs already.
+      activeTab = `view:${view.id}`;
+      selectTab(activeTab);
+    } catch (err) {
+      reportError(err);
+    }
+    return;
+  }
+  selectTab(tab.dataset.tab);
+});
 
 // ---------------------------------------------------------------------------
 // Rendering
@@ -61,6 +137,7 @@ function renderViewCards() {
     viewsEl.appendChild(card);
   }
   renderLabelWarnings();
+  renderTabs();
 }
 
 function fillCard(card, view) {
@@ -79,14 +156,15 @@ function fillCard(card, view) {
 // the user is typing in. Re-renders the cards if the set of windows changed.
 function applyConfig(next) {
   const sameViews =
-    config && config.views.length === next.views.length && config.views.every((v, i) => v.id === next.views[i].id);
+    config &&
+    config.views.length === next.views.length &&
+    config.views.every((v, i) => v.id === next.views[i].id && v.label === next.views[i].label);
   config = next;
   openOnLaunchEl.checked = config.openOnLaunch;
   showGripsEl.checked = config.showGrips;
-  countValueEl.value = String(config.views.length);
-  countDownEl.disabled = config.views.length <= limits.minViews;
-  countUpEl.disabled = config.views.length >= limits.maxViews;
-  obsEnabledEl.checked = config.obs.enabled;
+  menuBarIconEl.checked = config.menuBarIcon;
+  hideDockIconEl.checked = config.hideDockIcon;
+  hideDockIconEl.disabled = !config.menuBarIcon;
   if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
   if (document.activeElement !== obsPortEl) obsPortEl.value = String(config.obs.port);
   if (!sameViews) {
@@ -138,7 +216,12 @@ function renderDisplays() {
 
 function renderObs() {
   const o = status.obs || { state: 'disabled', inputs: [] };
-  obsTagEl.hidden = o.state !== 'connected';
+  const connected = o.state === 'connected';
+  obsTagEl.hidden = !connected;
+  obsDotEl.classList.toggle('on', connected);
+  const enabled = config && config.obs.enabled;
+  obsConnectEl.textContent = enabled ? 'Disconnect' : 'Connect';
+  obsConnectEl.classList.toggle('btn-primary', !enabled);
   const labels = {
     disabled: 'OBS connection is off.',
     disconnected: o.message || 'Not connected.',
@@ -147,11 +230,12 @@ function renderObs() {
     error: o.message || 'Connection failed.',
   };
   let text = labels[o.state] || '';
-  if (o.state === 'connected') {
+  if (connected) {
     text += ` ${o.inputs.length} window-capture source${o.inputs.length === 1 ? '' : 's'} found.`;
     if (o.lastSync) {
       const bits = [];
       if (o.lastSync.pointed.length) bits.push(`re-pointed ${o.lastSync.pointed.join(', ')}`);
+      if (o.lastSync.cropped && o.lastSync.cropped.length) bits.push(`cropped ${o.lastSync.cropped.join(', ')}`);
       if (o.lastSync.detected.length) bits.push(`linked ${o.lastSync.detected.map((d) => d.input).join(', ')}`);
       if (o.lastSync.missing.length) bits.push(`missing in OBS: ${o.lastSync.missing.join(', ')}`);
       text += bits.length ? ` Last sync ${bits.join('; ')}.` : ' Last sync: everything already in place.';
@@ -160,16 +244,22 @@ function renderObs() {
   obsStatusEl.textContent = text;
   obsStatusEl.classList.toggle('hint-error', o.state === 'error');
   obsPasswordEl.placeholder = o.hasPassword ? 'saved' : 'not set';
-  document.getElementById('obs-sync').disabled = o.state !== 'connected';
+  $('obs-sync').disabled = !connected;
 }
 
 function renderStatus() {
   const o = status.obs || { state: 'disabled', inputs: [] };
   const connected = o.state === 'connected';
+  collapseEl.textContent = status.collapsed ? 'Expand' : 'Collapse';
+  collapseEl.disabled = !status.views.some((v) => v.open);
+
   for (const view of config.views) {
     const card = cards.get(view.id);
     if (!card) continue;
     const s = status.views.find((v) => v.id === view.id) || { open: false };
+
+    const dot = document.querySelector(`[data-view-dot="${view.id}"]`);
+    if (dot) dot.classList.toggle('on', Boolean(s.open));
 
     const tag = card.querySelector('[data-role="tag"]');
     tag.hidden = !s.open;
@@ -185,61 +275,89 @@ function renderStatus() {
     card.querySelector('[data-action="reload"]').disabled = !s.open;
     card.querySelector('[data-action="reset"]').disabled = !s.open;
     card.querySelector('[data-action="devtools"]').disabled = !s.open;
+    card.querySelector('[data-role="session-note"]').hidden = !s.open;
+    card.querySelector('[data-action="remove-view"]').disabled = config.views.length <= limits.minViews;
 
     const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
     const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
     card.querySelector('[data-status="title"]').textContent = `Coffee Pub Browser - ${view.label}  ·  ${size}${captured}`;
 
-    // OBS sources linked to this window
-    const chips = card.querySelector('[data-role="chips"]');
-    chips.textContent = '';
-    for (const name of view.obsSources) {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-      const missing = connected && !o.inputs.includes(name);
-      if (missing) {
-        chip.classList.add('chip-missing');
-        chip.title = 'Not found in OBS';
-      }
-      chip.append(name);
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = '×';
-      remove.title = 'Unlink';
-      remove.dataset.unlink = name;
-      chip.appendChild(remove);
-      chips.appendChild(chip);
-    }
-    if (!view.obsSources.length) {
-      const none = document.createElement('span');
-      none.className = 'hint';
-      none.textContent = connected ? 'none linked' : 'connect to OBS to link sources';
-      chips.appendChild(none);
-    }
-    const select = card.querySelector('[data-role="link-select"]');
-    if (!isEditing(select)) {
-      select.textContent = '';
-      const first = document.createElement('option');
-      first.value = '';
-      first.textContent = 'Link existing source...';
-      select.appendChild(first);
-      const linkedElsewhere = new Set(config.views.flatMap((v) => v.obsSources));
-      for (const name of o.inputs) {
-        if (linkedElsewhere.has(name)) continue;
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        select.appendChild(option);
-      }
-      select.hidden = !connected || select.options.length === 1;
-    }
-    const create = card.querySelector('[data-action="create-source"]');
-    create.hidden = !connected;
-    create.disabled = !s.open;
-    create.title = s.open ? '' : 'Start the window first';
-
+    renderSources(card, view, s, o, connected);
     renderRegions(card, view, s, o, connected);
   }
+}
+
+function makeChip(name, { missing = false, dim = false, title = '' } = {}) {
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  if (missing) chip.classList.add('chip-missing');
+  if (dim) chip.classList.add('chip-dim');
+  if (title) chip.title = title;
+  chip.append(name);
+  return chip;
+}
+
+function makeSmallButton(text, action, { danger = false, disabled = false, title = '' } = {}) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `btn btn-small${danger ? ' btn-danger' : ''}`;
+  button.textContent = text;
+  button.dataset.action = action;
+  button.disabled = disabled;
+  if (title) button.title = title;
+  return button;
+}
+
+// Window-level OBS sources: exists -> chip with forget; missing -> Add to OBS.
+function renderSources(card, view, s, o, connected) {
+  const chips = card.querySelector('[data-role="chips"]');
+  chips.textContent = '';
+  for (const name of view.obsSources) {
+    const exists = !connected || o.inputs.includes(name);
+    const chip = makeChip(name, { missing: connected && !exists, dim: !connected, title: connected && !exists ? 'Not found in OBS' : '' });
+    if (connected && !exists) {
+      const add = makeSmallButton('Add to OBS', 'recreate-source', {
+        disabled: !s.open,
+        title: s.open ? 'Re-create this source in OBS with the same name' : 'Start the window first',
+      });
+      add.dataset.source = name;
+      chip.appendChild(add);
+    }
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.textContent = '×';
+    forget.title = 'Forget this link (keeps the source in OBS)';
+    forget.dataset.unlink = name;
+    chip.appendChild(forget);
+    chips.appendChild(chip);
+  }
+  if (!view.obsSources.length) {
+    const none = document.createElement('span');
+    none.className = 'hint';
+    none.textContent = connected ? 'none linked' : 'connect to OBS to link sources';
+    chips.appendChild(none);
+  }
+  const select = card.querySelector('[data-role="link-select"]');
+  if (!isEditing(select)) {
+    select.textContent = '';
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = 'Link existing source...';
+    select.appendChild(first);
+    const linked = new Set(config.views.flatMap((v) => [...v.obsSources, ...v.regions.map((r) => r.obsSource)]));
+    for (const name of o.inputs) {
+      if (linked.has(name)) continue;
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    }
+    select.hidden = !connected || select.options.length === 1;
+  }
+  const create = card.querySelector('[data-action="create-source"]');
+  create.hidden = !connected;
+  create.disabled = !s.open;
+  create.title = s.open ? '' : 'Start the window first';
 }
 
 function renderRegions(card, view, s, o, connected) {
@@ -249,6 +367,14 @@ function renderRegions(card, view, s, o, connected) {
     const li = document.createElement('li');
     li.className = 'region';
     li.dataset.region = region.id;
+    if (!region.enabled) li.classList.add('disabled');
+
+    const enabled = document.createElement('input');
+    enabled.type = 'checkbox';
+    enabled.checked = region.enabled;
+    enabled.dataset.action = 'toggle-region';
+    enabled.title = region.enabled ? 'Enabled: the app maintains this region in OBS' : 'Disabled: hidden in OBS and not maintained';
+    li.appendChild(enabled);
 
     const name = document.createElement('span');
     name.className = 'region-name';
@@ -264,43 +390,31 @@ function renderRegions(card, view, s, o, connected) {
 
     const actions = document.createElement('span');
     actions.className = 'region-actions';
-    if (region.obsSource) {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-      if (connected && !o.inputs.includes(region.obsSource)) {
-        chip.classList.add('chip-missing');
-        chip.title = 'Not found in OBS';
+    if (connected) {
+      const exists = region.obsSource && o.inputs.includes(region.obsSource);
+      if (exists) {
+        actions.appendChild(makeChip(region.obsSource, { title: 'OBS source' }));
+        actions.appendChild(makeSmallButton('Remove from OBS', 'remove-region-source', { danger: true, title: 'Delete this source in OBS' }));
+      } else {
+        actions.appendChild(
+          makeSmallButton('Add to OBS', 'create-region-source', {
+            disabled: !s.open,
+            title: s.open
+              ? region.obsSource
+                ? `Re-create "${region.obsSource}" in OBS`
+                : 'Create a cropped window-capture source for this region'
+              : 'Start the window first',
+          }),
+        );
       }
-      chip.append(region.obsSource);
-      const unlink = document.createElement('button');
-      unlink.type = 'button';
-      unlink.textContent = '×';
-      unlink.title = 'Forget this OBS source (does not delete it in OBS)';
-      unlink.dataset.action = 'unlink-region';
-      chip.appendChild(unlink);
-      actions.appendChild(chip);
-    } else if (connected) {
-      const create = document.createElement('button');
-      create.type = 'button';
-      create.className = 'btn btn-small';
-      create.textContent = 'Create in OBS';
-      create.dataset.action = 'create-region-source';
-      create.disabled = !s.open;
-      create.title = s.open ? 'Create a cropped window-capture source for this region' : 'Start the window first';
-      actions.appendChild(create);
+    } else if (region.obsSource) {
+      const label = document.createElement('span');
+      label.className = 'region-source-name';
+      label.textContent = region.obsSource;
+      actions.appendChild(label);
     }
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.className = 'btn btn-small';
-    edit.textContent = 'Edit';
-    edit.dataset.action = 'edit-region';
-    actions.appendChild(edit);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'btn btn-small btn-danger';
-    remove.textContent = 'Remove';
-    remove.dataset.action = 'remove-region';
-    actions.appendChild(remove);
+    actions.appendChild(makeSmallButton('Edit', 'edit-region'));
+    actions.appendChild(makeSmallButton('Delete', 'delete-region', { danger: true }));
     li.appendChild(actions);
     list.appendChild(li);
   }
@@ -337,6 +451,8 @@ function onFieldInput(event) {
   Object.assign(view, readCard(card, view));
   if (event.target.dataset.field === 'label') {
     card.querySelector('.view-title').textContent = `${view.label || 'Untitled'} window`;
+    const tab = document.querySelector(`.tab[data-tab="view:${view.id}"]`);
+    if (tab) tab.lastChild.textContent = view.label || 'Untitled';
     renderLabelWarnings();
   }
   scheduleSave();
@@ -344,6 +460,7 @@ function onFieldInput(event) {
 
 async function onCardClick(event) {
   const id = event.currentTarget.dataset.viewId;
+  const view = config.views.find((v) => v.id === id);
   const unlink = event.target.closest('[data-unlink]');
   if (unlink) {
     await api.obsUnlinkSource(id, unlink.dataset.unlink);
@@ -351,37 +468,12 @@ async function onCardClick(event) {
   }
   const button = event.target.closest('[data-action]');
   if (!button) return;
-  await flushSave();
-  const s = status.views.find((v) => v.id === id) || { open: false };
   const regionEl = event.target.closest('[data-region]');
   const regionId = regionEl ? regionEl.dataset.region : null;
-  const view = config.views.find((v) => v.id === id);
+  const region = regionId ? view.regions.find((r) => r.id === regionId) : null;
+  if (button.dataset.action !== 'toggle-region') await flushSave();
+  const s = status.views.find((v) => v.id === id) || { open: false };
   try {
-    switch (button.dataset.action) {
-      case 'add-region':
-        await openPicker(id, null);
-        return;
-      case 'edit-region':
-        await openPicker(id, view.regions.find((r) => r.id === regionId) || null);
-        return;
-      case 'remove-region': {
-        const region = view.regions.find((r) => r.id === regionId);
-        if (region && window.confirm(`Remove region "${region.name}"? Its OBS source, if any, stays in OBS.`)) {
-          await api.removeRegion(id, regionId);
-        }
-        return;
-      }
-      case 'create-region-source':
-        await api.obsCreateRegionSource(id, regionId);
-        return;
-      case 'unlink-region': {
-        const region = view.regions.find((r) => r.id === regionId);
-        if (region) await api.saveRegion(id, { ...region, obsSource: '' });
-        return;
-      }
-      default:
-        break;
-    }
     switch (button.dataset.action) {
       case 'toggle':
         if (s.open) await api.closeView(id);
@@ -399,11 +491,42 @@ async function onCardClick(event) {
       case 'create-source':
         await api.obsCreateSource(id);
         break;
+      case 'recreate-source':
+        await api.obsRecreateSource(id, button.dataset.source);
+        break;
+      case 'remove-view':
+        if (window.confirm(`Remove the "${view.label}" window and its settings?`)) {
+          activeTab = 'general';
+          await api.removeView(id);
+        }
+        break;
+      case 'add-region':
+        await openPicker(id, null);
+        break;
+      case 'edit-region':
+        await openPicker(id, region);
+        break;
+      case 'delete-region':
+        if (region && window.confirm(`Delete region "${region.name}"? Its OBS source, if any, stays in OBS.`)) {
+          await api.removeRegion(id, regionId);
+        }
+        break;
+      case 'toggle-region':
+        await api.setRegionEnabled(id, regionId, button.checked);
+        break;
+      case 'create-region-source':
+        await api.obsCreateRegionSource(id, regionId);
+        break;
+      case 'remove-region-source':
+        if (region && window.confirm(`Delete "${region.obsSource}" from OBS?`)) {
+          await api.obsRemoveSource(region.obsSource);
+        }
+        break;
       default:
         break;
     }
   } catch (err) {
-    setSaveState(err.message.replace(/^.*Error: /, ''), 'error');
+    reportError(err);
   }
 }
 
@@ -430,6 +553,8 @@ async function flushSave() {
   try {
     config.openOnLaunch = openOnLaunchEl.checked;
     config.showGrips = showGripsEl.checked;
+    config.menuBarIcon = menuBarIconEl.checked;
+    config.hideDockIcon = hideDockIconEl.checked;
     const saved = await api.saveConfig(config);
     setSaveState('All changes saved');
     applyConfig(saved);
@@ -439,84 +564,59 @@ async function flushSave() {
   }
 }
 
-async function changeCount(delta) {
-  await flushSave();
-  const target = config.views.length + delta;
-  if (target < limits.minViews || target > limits.maxViews) return;
-  if (delta < 0) {
-    const last = config.views[config.views.length - 1];
-    if (last.url && !window.confirm(`Remove the "${last.label}" window? Its settings will be lost.`)) return;
-  }
-  const saved = await api.setViewCount(target);
-  applyConfig(saved);
-  renderStatus();
-}
-
-countDownEl.addEventListener('click', () => changeCount(-1));
-countUpEl.addEventListener('click', () => changeCount(1));
-
-document.getElementById('open-all').addEventListener('click', async () => {
+$('open-all').addEventListener('click', async () => {
   await flushSave();
   await api.openAll();
 });
-document.getElementById('close-all').addEventListener('click', () => api.closeAll());
-document.getElementById('arrange').addEventListener('click', async () => {
+$('close-all').addEventListener('click', () => api.closeAll());
+collapseEl.addEventListener('click', () => (status.collapsed ? api.expandViews() : api.collapseViews()));
+$('arrange').addEventListener('click', async () => {
   await flushSave();
   await api.arrangeViews(Number(arrangeDisplayEl.value));
 });
-openOnLaunchEl.addEventListener('change', scheduleSave);
+for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl]) el.addEventListener('change', scheduleSave);
 showGripsEl.addEventListener('change', async () => {
   await flushSave();
   await api.setShowGrips(showGripsEl.checked);
 });
-document.getElementById('clear-session').addEventListener('click', () => api.clearSession());
-document.getElementById('reveal-config').addEventListener('click', () => api.revealConfig());
-document.getElementById('reset-config').addEventListener('click', async () => {
+$('clear-session').addEventListener('click', () => api.clearSession());
+$('reveal-config').addEventListener('click', () => api.revealConfig());
+$('reset-config').addEventListener('click', async () => {
   if (!window.confirm('Reset URLs, sizes and positions to the defaults?')) return;
   const saved = await api.resetConfig();
   setSaveState('All changes saved');
+  activeTab = 'general';
   applyConfig(saved);
   renderStatus();
 });
 
 // --- OBS ---
-async function saveObsSettings() {
+async function saveObsSettings(enabled) {
   await flushSave();
   status.obs = await api.obsSetSettings({
-    enabled: obsEnabledEl.checked,
+    enabled,
     host: obsHostEl.value.trim() || '127.0.0.1',
     port: Number(obsPortEl.value) || 4455,
   });
+  config.obs = { ...config.obs, enabled, host: obsHostEl.value.trim() || '127.0.0.1', port: Number(obsPortEl.value) || 4455 };
   renderObs();
 }
-obsEnabledEl.addEventListener('change', saveObsSettings);
-obsHostEl.addEventListener('change', saveObsSettings);
-obsPortEl.addEventListener('change', saveObsSettings);
-document.getElementById('obs-save-password').addEventListener('click', async () => {
+obsHostEl.addEventListener('change', () => saveObsSettings(config.obs.enabled));
+obsPortEl.addEventListener('change', () => saveObsSettings(config.obs.enabled));
+obsConnectEl.addEventListener('click', () => saveObsSettings(!config.obs.enabled));
+$('obs-save-password').addEventListener('click', async () => {
   status.obs = await api.obsSetPassword(obsPasswordEl.value);
   obsPasswordEl.value = '';
   renderObs();
 });
 obsPasswordEl.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') document.getElementById('obs-save-password').click();
+  if (event.key === 'Enter') $('obs-save-password').click();
 });
-document.getElementById('obs-connect').addEventListener('click', async () => {
-  if (!obsEnabledEl.checked) {
-    obsEnabledEl.checked = true;
-    await saveObsSettings();
-  }
-  try {
-    status.obs = await api.obsConnect();
-  } catch (err) {
-    // Status text carries the reason.
-  }
-  renderObs();
-});
-document.getElementById('obs-sync').addEventListener('click', async () => {
+$('obs-sync').addEventListener('click', async () => {
   try {
     await api.obsSync();
   } catch (err) {
-    setSaveState(err.message.replace(/^.*Error: /, ''), 'error');
+    reportError(err);
   }
 });
 
@@ -527,8 +627,6 @@ document.addEventListener('focusout', (event) => {
 
 api.onStatus((next) => {
   status = next;
-  // Config changes made outside the panel (grip drags, arrow-key resizes,
-  // menu toggles, OBS links) arrive here. Skip while the user has unsaved edits.
   if (next.config && !isDirty()) applyConfig(next.config);
   renderDisplays();
   renderObs();
@@ -540,23 +638,24 @@ api.onStatus((next) => {
 // ---------------------------------------------------------------------------
 
 const picker = {
-  el: document.getElementById('picker'),
-  title: document.getElementById('picker-title'),
-  img: document.getElementById('picker-img'),
-  wrap: document.getElementById('snapshot-wrap'),
-  sel: document.getElementById('picker-sel'),
-  name: document.getElementById('region-name'),
-  selectorField: document.getElementById('selector-field'),
-  selector: document.getElementById('region-selector'),
-  measureWarning: document.getElementById('measure-warning'),
-  x: document.getElementById('region-x'),
-  y: document.getElementById('region-y'),
-  w: document.getElementById('region-w'),
-  h: document.getElementById('region-h'),
-  statusEl: document.getElementById('picker-status'),
+  el: $('picker'),
+  title: $('picker-title'),
+  img: $('picker-img'),
+  wrap: $('snapshot-wrap'),
+  sel: $('picker-sel'),
+  name: $('region-name'),
+  selectorField: $('selector-field'),
+  selector: $('region-selector'),
+  measureWarning: $('measure-warning'),
+  measureResult: $('measure-result'),
+  x: $('region-x'),
+  y: $('region-y'),
+  w: $('region-w'),
+  h: $('region-h'),
+  statusEl: $('picker-status'),
   viewId: null,
   regionId: null,
-  size: { width: 1, height: 1 }, // window content size in points
+  size: { width: 1, height: 1 },
   drag: null,
 };
 
@@ -581,7 +680,6 @@ function setPickerRect(rect) {
   drawSelection();
 }
 
-// Map window points to the displayed snapshot and back.
 function pointsToPx() {
   return picker.img.clientWidth / picker.size.width;
 }
@@ -609,7 +707,7 @@ async function loadSnapshot() {
     });
     picker.statusEl.textContent = `Window is ${snap.width} × ${snap.height}.`;
   } catch (err) {
-    picker.statusEl.textContent = err.message.replace(/^.*Error: /, '');
+    picker.statusEl.textContent = String(err.message).replace(/^.*Error: /, '');
   }
   drawSelection();
 }
@@ -623,6 +721,7 @@ async function openPicker(viewId, region) {
   document.querySelector(`input[name="region-mode"][value="${region ? region.mode : 'rect'}"]`).checked = true;
   picker.selector.value = region ? region.selector : '';
   picker.measureWarning.hidden = true;
+  picker.measureResult.hidden = true;
   picker.selectorField.hidden = pickerMode() !== 'selector';
   picker.sel.hidden = true;
   picker.img.removeAttribute('src');
@@ -638,37 +737,38 @@ function closePicker() {
   picker.drag = null;
 }
 
-document.getElementById('picker-close').addEventListener('click', closePicker);
+$('picker-close').addEventListener('click', closePicker);
 picker.el.addEventListener('click', (event) => {
   if (event.target === picker.el) closePicker();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !picker.el.hidden) closePicker();
 });
-document.getElementById('picker-refresh').addEventListener('click', loadSnapshot);
+$('picker-refresh').addEventListener('click', loadSnapshot);
 for (const radio of document.querySelectorAll('input[name="region-mode"]')) {
   radio.addEventListener('change', () => {
     picker.selectorField.hidden = pickerMode() !== 'selector';
   });
 }
-for (const input of [picker.x, picker.y, picker.w, picker.h]) {
-  input.addEventListener('input', drawSelection);
-}
+for (const input of [picker.x, picker.y, picker.w, picker.h]) input.addEventListener('input', drawSelection);
 window.addEventListener('resize', () => {
   if (!picker.el.hidden) drawSelection();
 });
 
-document.getElementById('region-measure').addEventListener('click', async () => {
+$('region-measure').addEventListener('click', async () => {
   picker.measureWarning.hidden = true;
+  picker.measureResult.hidden = true;
   const rect = await api.measureView(picker.viewId, picker.selector.value).catch(() => null);
   if (!rect) {
+    picker.measureWarning.textContent = 'Element not found in the page.';
     picker.measureWarning.hidden = false;
     return;
   }
   setPickerRect(rect);
+  picker.measureResult.textContent = `Found: ${rect.x}, ${rect.y}  ·  ${rect.width} × ${rect.height}`;
+  picker.measureResult.hidden = false;
 });
 
-// Drag a rectangle on the snapshot.
 function snapshotPoint(event) {
   const bounds = picker.img.getBoundingClientRect();
   const k = pointsToPx();
@@ -692,7 +792,7 @@ window.addEventListener('mouseup', () => {
   picker.drag = null;
 });
 
-document.getElementById('picker-save').addEventListener('click', async () => {
+$('picker-save').addEventListener('click', async () => {
   const mode = pickerMode();
   const region = {
     id: picker.regionId || undefined,
@@ -709,12 +809,15 @@ document.getElementById('picker-save').addEventListener('click', async () => {
   const existing = picker.regionId
     ? (config.views.find((v) => v.id === picker.viewId) || { regions: [] }).regions.find((r) => r.id === picker.regionId)
     : null;
-  if (existing) region.obsSource = existing.obsSource;
+  if (existing) {
+    region.obsSource = existing.obsSource;
+    region.enabled = existing.enabled;
+  }
   try {
     await api.saveRegion(picker.viewId, region);
     closePicker();
   } catch (err) {
-    picker.statusEl.textContent = err.message.replace(/^.*Error: /, '');
+    picker.statusEl.textContent = String(err.message).replace(/^.*Error: /, '');
   }
 });
 
@@ -726,11 +829,12 @@ document.getElementById('picker-save').addEventListener('click', async () => {
   const [cfg, st, info] = await Promise.all([api.getConfig(), api.getStatus(), api.getAppInfo()]);
   if (info.limits) limits = info.limits;
   status = st;
+  activeTab = recallTab();
   applyConfig(cfg);
   renderDisplays();
   renderObs();
   renderStatus();
-  document.getElementById('app-info').textContent =
+  $('app-info').textContent =
     `${info.revision}${info.build && info.build.branch ? ` on ${info.build.branch}` : ''} - Electron ${info.electron} - Chromium ${info.chrome}`;
   document.title = `Coffee Pub Browser - Control Panel - ${info.revision}`;
 })().catch((err) => setSaveState(`Failed to start: ${err.message}`, 'error'));

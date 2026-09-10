@@ -168,6 +168,35 @@ class ObsBridge extends EventEmitter {
     }
   }
 
+  async removeInput(inputName) {
+    await this.obs.call('RemoveInput', { inputName });
+    await this.refreshInputs();
+  }
+
+  // Show or hide every scene item that references a source, in top-level
+  // scenes and inside groups. Returns how many items were changed.
+  async setSourceVisible(sourceName, visible) {
+    const { scenes } = await this.obs.call('GetSceneList');
+    let changed = 0;
+    const apply = async (sceneName, items) => {
+      for (const item of items) {
+        if (item.sourceName === sourceName) {
+          await this.obs.call('SetSceneItemEnabled', { sceneName, sceneItemId: item.sceneItemId, sceneItemEnabled: visible });
+          changed += 1;
+        }
+        if (item.isGroup) {
+          const { sceneItems } = await this.obs.call('GetGroupSceneItemList', { sceneName: item.sourceName });
+          await apply(item.sourceName, sceneItems);
+        }
+      }
+    };
+    for (const scene of scenes) {
+      const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName: scene.sceneName });
+      await apply(scene.sceneName, sceneItems);
+    }
+    return changed;
+  }
+
   async createInput(inputName, windowId) {
     const { currentProgramSceneName } = await this.obs.call('GetCurrentProgramScene');
     await this.obs.call('CreateInput', {

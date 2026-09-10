@@ -599,3 +599,92 @@ select:focus {
   justify-content: flex-end;
   margin-top: auto;
 }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.view-tabs {
+  display: contents;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: #2b211a;
+}
+
+.tab.active {
+  color: var(--text);
+  background: var(--bg-card);
+  border-color: var(--border);
+  border-bottom: 1px solid var(--bg-card);
+}
+
+.tab-add {
+  font-size: 16px;
+  padding: 6px 12px;
+  color: var(--accent);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  display: inline-block;
+}
+
+.dot.on {
+  background: var(--ok);
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.check-indent {
+  margin-left: 22px;
+}
+
+.card-footer {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.region.disabled .region-name,
+.region.disabled .region-geom {
+  opacity: 0.5;
+}
+
+.chip.chip-dim {
+  opacity: 0.6;
+}
+
+.region-source-name {
+  color: var(--text-dim);
+}

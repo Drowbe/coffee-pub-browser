@@ -19,6 +19,8 @@ chat stream. You can run one to five windows; two is the default.
   every launch, so you never have to re-pick a window in OBS, and creates sources for you.
 - Named regions: mark part of a window, by drawing a rectangle on a snapshot or by naming a
   CSS selector, and the app creates a cropped OBS source for it and keeps the crop current.
+- Per-window choice of a shared Foundry login or a separate one, an optional menu bar icon,
+  and a Collapse command that slides the windows to the screen edge while OBS keeps capturing.
 
 ## Requirements
 
@@ -77,9 +79,14 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
 ## Using it
 
 1. Launch **Coffee Pub Browser**. The control panel opens and, by default, the windows open
-   too.
+   too. The panel has a **General** tab, an **OBS** tab, one tab per window, and a **+** tab
+   that adds a window (up to five). Each window tab has a **Remove window** button at the
+   bottom.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
-   dedicated observer user works well). The other windows share the login.
+   dedicated observer user works well). Windows whose **Session** is set to *Shared login*
+   use that same login; set a window to *Separate login* to give it its own cookies, for a
+   different Foundry user or a different site. The change applies the next time the window
+   starts.
 3. In the control panel, set each window's **Width** and **Height** to the exact size you
    want. Changes apply live to open windows and are saved automatically.
 4. The **Start** button on each card opens its window and turns into **Stop**; an ACTIVE tag
@@ -94,10 +101,15 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
    hand in the panel. When a window is flush with the top of the display, its grip overlaps
    the window's top edge instead; that only affects what you see on the desktop, not the OBS
    capture.
-6. **Number of windows** in Layout & Startup adds or removes windows, from one to five. New
-   windows start with no URL and show a placeholder until you enter one. Each window is
+6. New windows start with no URL and show a placeholder until you enter one. Each window is
    listed in OBS by its label, so give every window a different label.
-7. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
+7. **Collapse** in the header, the menu bar icon, or Cmd+Shift+C slides every open window to
+   the right edge of its display, leaving a thin strip visible. OBS keeps capturing a window
+   that is partly on screen, whereas hiding or minimizing it stops the capture. **Expand**
+   puts the windows back.
+8. The optional **menu bar icon** (General tab) offers Start, Stop, Collapse, Sync OBS and
+   Quit, and can hide the Dock icon so the app behaves like a utility.
+9. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
    it with **Cmd+0** or by clicking the Dock icon. Quit with **Cmd+Q**.
 
 ### Add the windows to OBS
@@ -143,9 +155,15 @@ and a status panel pinned inside the Stream view, define a **region** for each.
 3. For an element your own module renders, pick **CSS selector** instead, enter the selector
    (for example `#scoreboard`) and click **Measure**. The app reads the element's position from
    the page, and re-measures it on every OBS sync so the crop follows the element.
-4. Click **Save region**, then **Create in OBS**. The app adds a window-capture source named
+4. Click **Save region**, then **Add to OBS**. The app adds a window-capture source named
    after the window and region, such as `Stream - Scoreboard`, with a **Crop/Pad** filter
    called `Coffee Pub Crop` that isolates the region. Drop that source into any scene.
+
+While connected, the app knows whether each source still exists in OBS. A region whose source
+you deleted in OBS offers **Add to OBS** again, which re-creates it under the same name;
+**Remove from OBS** deletes the source from OBS. The checkbox in front of a region disables
+it: the app stops maintaining it and hides it in every OBS scene until you enable it again.
+**Delete** removes the region itself.
 
 On every sync the app re-points the region's source at the window and updates the crop
 values, including the Retina factor, so resizing the window or editing the region keeps the
@@ -167,6 +185,7 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | --- | --- |
 | Cmd+0 | Show the control panel |
 | Cmd+G | Show or hide the grip bars |
+| Cmd+Shift+C | Collapse the windows to the screen edge, or expand them |
 | Cmd+1 to Cmd+5 | Open (or focus) window 1 to 5 |
 | Cmd+Shift+1 to Cmd+Shift+5 | Reload window 1 to 5 |
 | Cmd+R | Reload the focused window |
@@ -181,7 +200,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "enabled": false, "host": "127.0.0.1", "port": 4455 },
@@ -233,15 +252,17 @@ Settings are stored as JSON at
 | Field | Meaning |
 | --- | --- |
 | `showGrips` | Show the grip bars above the windows. |
+| `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `obs` | OBS WebSocket connection: `enabled`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
 | `x`, `y` | Window position, written by the app when you move the window; `null` lets macOS place it. |
 | `obsSources` | Names of OBS window-capture sources that follow this window. |
-| `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains. |
+| `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains; `enabled` false hides it in OBS and stops maintenance. |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
+| `session` | `shared` (default) or `separate`; a separate window has its own cookies and storage. |
 
 ## Releasing a new version
 
