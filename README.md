@@ -20,7 +20,16 @@ chat stream.
 - To build: [Node.js](https://nodejs.org) 18 or newer.
 - OBS Studio 28 or newer (for the ScreenCaptureKit based Window Capture).
 
-## Build the app
+## Get the app
+
+### Option A: download a build from GitHub Actions
+
+Every push runs the **Build macOS app** workflow on a macOS runner. Open the repository's
+**Actions** tab, pick the latest green run, and download the **Coffee-Pub-Browser-macOS**
+artifact. Unzip it to get the `.dmg`, then follow [First launch](#first-launch-unsigned-build)
+below. Pushing a tag like `v1.0.0` also attaches the files to a GitHub Release.
+
+### Option B: build it yourself
 
 ```bash
 npm install
