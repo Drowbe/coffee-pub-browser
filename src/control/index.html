@@ -12,7 +12,7 @@
       <span class="brand-mark">&#9749;</span>
       <div>
         <h1>Coffee Pub Browser</h1>
-        <p class="subtitle">Two fixed-size Chromium windows for OBS. Add each one in OBS as a <strong>Window Capture</strong> source.</p>
+        <p class="subtitle">Fixed-size Chromium windows for OBS. Add each one in OBS as a <strong>Window Capture</strong> source.</p>
       </div>
     </div>
     <div class="topbar-actions">
@@ -22,41 +22,46 @@
   </header>
 
   <main>
-    <section id="views" class="views"></section>
-
     <section class="card global">
       <h2>Layout &amp; Startup</h2>
+
       <div class="row">
+        <label class="field field-inline">
+          <span>Number of windows</span>
+          <span class="stepper">
+            <button id="count-down" class="btn btn-step" type="button" aria-label="Fewer windows">&minus;</button>
+            <output id="count-value">2</output>
+            <button id="count-up" class="btn btn-step" type="button" aria-label="More windows">+</button>
+          </span>
+        </label>
         <label class="field field-inline">
           <span>Display</span>
           <select id="arrange-display"></select>
         </label>
-        <button id="arrange" class="btn" type="button" title="Game at top-left, Stream to its right (or below if they do not fit)">Auto-arrange on display</button>
+        <button id="arrange" class="btn" type="button" title="Windows go left to right from the top-left corner, wrapping to a new row when they no longer fit">Auto-arrange on display</button>
       </div>
-      <div class="row">
+
+      <div class="row checks-column">
         <label class="check">
           <input id="open-on-launch" type="checkbox">
-          <span>Open both windows when the app launches</span>
+          <span>Open the windows when the app launches</span>
         </label>
-      </div>
-      <div class="row">
         <label class="check">
           <input id="show-grips" type="checkbox">
-          <span>Show grip bars above the windows (Cmd+G). Drag a grip to move its window; arrow keys nudge it. Grips are never captured by OBS.</span>
+          <span>Show grip bars above the windows (Cmd+G). Drag a grip to move its window; arrow keys resize it. Grips are never captured by OBS.</span>
         </label>
       </div>
       <p class="hint" id="retina-hint"></p>
-    </section>
 
-    <section class="card">
-      <h2>Session</h2>
-      <p class="hint">Both windows share one login. Log into Foundry in the Game window and the Stream window uses the same session.</p>
-      <div class="row">
+      <div class="row session-row">
+        <span class="hint">All windows share one Foundry login.</span>
         <button id="clear-session" class="btn btn-danger" type="button">Sign out (clear cookies)</button>
         <button id="reveal-config" class="btn" type="button">Show config file</button>
         <button id="reset-config" class="btn" type="button">Reset to defaults</button>
       </div>
     </section>
+
+    <section id="views" class="views"></section>
   </main>
 
   <footer class="statusbar">
@@ -67,18 +72,29 @@
   <template id="view-template">
     <article class="card view">
       <header class="view-head">
-        <h2 class="view-title"></h2>
-        <span class="badge badge-closed" data-role="badge">Closed</span>
+        <div class="view-head-left">
+          <h2 class="view-title"></h2>
+          <span class="badge badge-closed" data-role="badge">Closed</span>
+        </div>
+        <div class="view-actions">
+          <button class="btn btn-primary" data-action="open" type="button">Open</button>
+          <button class="btn" data-action="focus" type="button">Bring to front</button>
+          <button class="btn" data-action="reload" type="button">Reload</button>
+          <button class="btn" data-action="center" type="button">Center on display</button>
+          <button class="btn" data-action="devtools" type="button">DevTools</button>
+          <button class="btn btn-danger" data-action="close" type="button">Close</button>
+        </div>
       </header>
 
       <div class="grid">
-        <label class="field span-2">
+        <label class="field span-3">
           <span>URL</span>
           <input data-field="url" type="url" placeholder="https://game.coffeepub.live/game" spellcheck="false">
         </label>
         <label class="field">
           <span>Label</span>
           <input data-field="label" type="text" maxlength="40">
+          <small class="field-warning" data-role="label-warning" hidden>Another window has this label; OBS will show two windows with the same name.</small>
         </label>
         <label class="field">
           <span>Width (px)</span>
@@ -89,10 +105,6 @@
           <input data-field="height" type="number" min="100" max="7680" step="1">
         </label>
         <label class="field">
-          <span>Zoom</span>
-          <input data-field="zoom" type="number" min="0.25" max="5" step="0.05">
-        </label>
-        <label class="field">
           <span>X</span>
           <input data-field="x" type="number" step="1" placeholder="auto">
         </label>
@@ -100,19 +112,11 @@
           <span>Y</span>
           <input data-field="y" type="number" step="1" placeholder="auto">
         </label>
-        <div class="field checks span-2">
-          <label class="check"><input data-field="enabled" type="checkbox"><span>Open on launch</span></label>
-          <label class="check"><input data-field="muted" type="checkbox"><span>Mute audio</span></label>
-        </div>
       </div>
 
-      <div class="view-actions">
-        <button class="btn btn-primary" data-action="open" type="button">Open</button>
-        <button class="btn" data-action="focus" type="button">Bring to front</button>
-        <button class="btn" data-action="reload" type="button">Reload</button>
-        <button class="btn" data-action="center" type="button">Center on display</button>
-        <button class="btn" data-action="devtools" type="button">DevTools</button>
-        <button class="btn btn-danger" data-action="close" type="button">Close</button>
+      <div class="checks">
+        <label class="check"><input data-field="enabled" type="checkbox"><span>Open on launch</span></label>
+        <label class="check"><input data-field="muted" type="checkbox"><span>Mute audio</span></label>
       </div>
 
       <dl class="status">

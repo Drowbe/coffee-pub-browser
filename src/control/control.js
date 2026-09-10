@@ -9,19 +9,27 @@ const openOnLaunchEl = document.getElementById('open-on-launch');
 const showGripsEl = document.getElementById('show-grips');
 const arrangeDisplayEl = document.getElementById('arrange-display');
 const retinaHintEl = document.getElementById('retina-hint');
+const countValueEl = document.getElementById('count-value');
+const countDownEl = document.getElementById('count-down');
+const countUpEl = document.getElementById('count-up');
 
 let config = null;
 let status = { views: [], displays: [] };
+let limits = { minViews: 1, maxViews: 5 };
 /** @type {Map<string, HTMLElement>} */
 const cards = new Map();
 let saveTimer = null;
 
-const NUMBER_FIELDS = new Set(['width', 'height', 'zoom', 'x', 'y']);
+const NUMBER_FIELDS = new Set(['width', 'height', 'x', 'y']);
 const BOOL_FIELDS = new Set(['enabled', 'muted']);
 
 function setSaveState(text, cls = '') {
   saveStateEl.textContent = text;
   saveStateEl.className = cls;
+}
+
+function isDirty() {
+  return saveStateEl.classList.contains('dirty');
 }
 
 // ---------------------------------------------------------------------------
@@ -41,6 +49,7 @@ function renderViewCards() {
     card.addEventListener('click', onCardClick);
     viewsEl.appendChild(card);
   }
+  renderLabelWarnings();
 }
 
 function fillCard(card, view) {
@@ -52,6 +61,41 @@ function fillCard(card, view) {
     } else {
       input.value = view[field] === null || view[field] === undefined ? '' : String(view[field]);
     }
+  }
+}
+
+// Apply a config coming from the main process without disturbing the field
+// the user is typing in. Re-renders the cards if the set of windows changed.
+function applyConfig(next) {
+  const sameViews =
+    config && config.views.length === next.views.length && config.views.every((v, i) => v.id === next.views[i].id);
+  config = next;
+  openOnLaunchEl.checked = config.openOnLaunch;
+  showGripsEl.checked = config.showGrips;
+  countValueEl.value = String(config.views.length);
+  countDownEl.disabled = config.views.length <= limits.minViews;
+  countUpEl.disabled = config.views.length >= limits.maxViews;
+  if (!sameViews) {
+    renderViewCards();
+    return;
+  }
+  for (const view of config.views) {
+    const card = cards.get(view.id);
+    if (card && !card.contains(document.activeElement)) fillCard(card, view);
+  }
+  renderLabelWarnings();
+}
+
+function renderLabelWarnings() {
+  const counts = new Map();
+  for (const view of config.views) {
+    const key = view.label.trim().toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const view of config.views) {
+    const card = cards.get(view.id);
+    if (!card) continue;
+    card.querySelector('[data-role="label-warning"]').hidden = counts.get(view.label.trim().toLowerCase()) < 2;
   }
 }
 
@@ -107,7 +151,7 @@ function renderStatus() {
         : '-',
     );
     set('position', s.open ? `${s.x}, ${s.y}` : view.x === null ? 'auto' : `${view.x}, ${view.y}`);
-    set('url', s.open && s.url ? s.url : '-');
+    set('url', s.open && s.url && !s.url.startsWith('data:') ? s.url : s.open ? 'no URL set' : '-');
 
     const toggle = (action, enabled) => {
       card.querySelector(`[data-action="${action}"]`).disabled = !enabled;
@@ -146,6 +190,7 @@ function onFieldInput(event) {
   Object.assign(view, readCard(card, view));
   if (event.target.dataset.field === 'label') {
     card.querySelector('.view-title').textContent = `${view.label || 'Untitled'} window`;
+    renderLabelWarnings();
   }
   scheduleSave();
 }
@@ -173,7 +218,6 @@ async function onCardClick(event) {
       break;
     case 'center':
       await api.centerView(id, Number(arrangeDisplayEl.value));
-      await refreshConfig();
       break;
     default:
       break;
@@ -189,33 +233,34 @@ function scheduleSave() {
 async function flushSave() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  if (!saveStateEl.classList.contains('dirty')) return;
+  if (!isDirty()) return;
   try {
     config.openOnLaunch = openOnLaunchEl.checked;
     config.showGrips = showGripsEl.checked;
-    config = await api.saveConfig(config);
-    // Re-fill so the user sees clamped/normalised values, but do not steal focus.
-    for (const view of config.views) {
-      const card = cards.get(view.id);
-      if (card && !card.contains(document.activeElement)) fillCard(card, view);
-    }
+    const saved = await api.saveConfig(config);
     setSaveState('All changes saved');
+    applyConfig(saved);
     renderStatus();
   } catch (err) {
     setSaveState(`Save failed: ${err.message}`, 'error');
   }
 }
 
-async function refreshConfig() {
-  config = await api.getConfig();
-  openOnLaunchEl.checked = config.openOnLaunch;
-  showGripsEl.checked = config.showGrips;
-  for (const view of config.views) {
-    const card = cards.get(view.id);
-    if (card && !card.contains(document.activeElement)) fillCard(card, view);
+async function changeCount(delta) {
+  await flushSave();
+  const target = config.views.length + delta;
+  if (target < limits.minViews || target > limits.maxViews) return;
+  if (delta < 0) {
+    const last = config.views[config.views.length - 1];
+    if (last.url && !window.confirm(`Remove the "${last.label}" window? Its settings will be lost.`)) return;
   }
+  const saved = await api.setViewCount(target);
+  applyConfig(saved);
   renderStatus();
 }
+
+countDownEl.addEventListener('click', () => changeCount(-1));
+countUpEl.addEventListener('click', () => changeCount(1));
 
 document.getElementById('open-all').addEventListener('click', async () => {
   await flushSave();
@@ -225,35 +270,32 @@ document.getElementById('close-all').addEventListener('click', () => api.closeAl
 document.getElementById('arrange').addEventListener('click', async () => {
   await flushSave();
   await api.arrangeViews(Number(arrangeDisplayEl.value));
-  await refreshConfig();
 });
 openOnLaunchEl.addEventListener('change', scheduleSave);
 showGripsEl.addEventListener('change', async () => {
+  await flushSave();
   await api.setShowGrips(showGripsEl.checked);
-  await refreshConfig();
 });
 document.getElementById('clear-session').addEventListener('click', () => api.clearSession());
 document.getElementById('reveal-config').addEventListener('click', () => api.revealConfig());
 document.getElementById('reset-config').addEventListener('click', async () => {
   if (!window.confirm('Reset URLs, sizes and positions to the defaults?')) return;
-  config = await api.resetConfig();
-  openOnLaunchEl.checked = config.openOnLaunch;
-  showGripsEl.checked = config.showGrips;
-  renderViewCards();
-  renderStatus();
+  const saved = await api.resetConfig();
   setSaveState('All changes saved');
+  applyConfig(saved);
+  renderStatus();
 });
 
-// Blur commits number fields immediately so a Cmd+1 right after typing uses the new size.
+// Blur commits fields immediately so a shortcut right after typing uses the new value.
 document.addEventListener('focusout', (event) => {
   if (event.target && event.target.matches('[data-field]') && saveTimer) flushSave();
 });
 
 api.onStatus((next) => {
   status = next;
-  if (typeof next.showGrips === 'boolean' && document.activeElement !== showGripsEl) {
-    showGripsEl.checked = next.showGrips;
-  }
+  // Config changes made outside the panel (grip drags, arrow-key resizes,
+  // menu toggles) arrive here. Skip while the user has unsaved edits.
+  if (next.config && !isDirty()) applyConfig(next.config);
   renderDisplays();
   renderStatus();
 });
@@ -264,11 +306,9 @@ api.onStatus((next) => {
 
 (async function init() {
   const [cfg, st, info] = await Promise.all([api.getConfig(), api.getStatus(), api.getAppInfo()]);
-  config = cfg;
+  if (info.limits) limits = info.limits;
   status = st;
-  openOnLaunchEl.checked = config.openOnLaunch;
-  showGripsEl.checked = config.showGrips;
-  renderViewCards();
+  applyConfig(cfg);
   renderDisplays();
   renderStatus();
   document.getElementById('app-info').textContent = `v${info.version} - Electron ${info.electron} - Chromium ${info.chrome}`;

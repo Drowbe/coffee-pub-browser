@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog } = require('electron');
-const { ConfigStore } = require('./config');
+const { ConfigStore, LIMITS } = require('./config');
 const { Grips } = require('./grips');
 
 const APP_NAME = 'Coffee Pub Browser';
@@ -30,7 +30,23 @@ const grips = new Grips({
     configStore.updateView(id, { x, y });
     broadcastStatus();
   },
+  onViewResized: (id, width, height) => {
+    configStore.updateView(id, { width, height });
+    broadcastStatus();
+  },
+  sizeLimits: { min: LIMITS.minSize, max: LIMITS.maxSize },
 });
+
+// Shown in a window that has no URL configured yet.
+const PLACEHOLDER_URL =
+  'data:text/html;charset=utf-8,' +
+  encodeURIComponent(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>No URL</title></head>' +
+    '<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;' +
+    'background:#1a1410;color:#a8998a;font:16px -apple-system,Helvetica,Arial,sans-serif;text-align:center">' +
+    '<div><div style="font-size:40px">&#9749;</div>No URL set for this window.<br>Enter one in the Control Panel (Cmd+0).</div>' +
+    '</body></html>',
+  );
 /** @type {BrowserWindow | null} */
 let controlWindow = null;
 let quitting = false;
@@ -79,7 +95,6 @@ function viewStatus(view) {
     url: wc.getURL(),
     loading: wc.isLoading(),
     muted: wc.isAudioMuted(),
-    zoom: wc.getZoomFactor(),
   };
 }
 
@@ -87,7 +102,7 @@ function fullStatus() {
   return {
     views: configStore.get().views.map(viewStatus),
     displays: screen.getAllDisplays().map(displaySummary),
-    showGrips: configStore.get().showGrips,
+    config: configStore.get(),
   };
 }
 
@@ -139,7 +154,6 @@ function createViewWindow(view) {
       nodeIntegration: false,
       sandbox: true,
       backgroundThrottling: false,
-      zoomFactor: view.zoom,
       spellcheck: false,
     },
   };
@@ -167,10 +181,7 @@ function createViewWindow(view) {
     return { action: 'deny' };
   });
 
-  win.webContents.on('did-finish-load', () => {
-    win.webContents.setZoomFactor(view.zoom);
-    broadcastStatus();
-  });
+  win.webContents.on('did-finish-load', broadcastStatus);
   win.webContents.on('did-start-loading', broadcastStatus);
   win.webContents.on('did-stop-loading', broadcastStatus);
   win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
@@ -193,6 +204,7 @@ function createViewWindow(view) {
     configStore.updateView(view.id, { x, y });
     broadcastStatus();
   });
+  win.on('resize', broadcastStatus);
   win.on('closed', () => {
     viewWindows.delete(view.id);
     broadcastStatus();
@@ -202,13 +214,13 @@ function createViewWindow(view) {
   // Safety net: never leave a window invisible if the page stalls.
   setTimeout(showView, 8000);
 
-  win.loadURL(view.url);
+  win.loadURL(view.url || PLACEHOLDER_URL);
   grips.attach(view.id, win, view.label);
   broadcastStatus();
   return win;
 }
 
-// Push the saved size/position/zoom/mute into an already-open window.
+// Push the saved size/position/mute into an already-open window.
 function applyViewSettings(view) {
   const win = viewWindows.get(view.id);
   if (!isAlive(win)) return;
@@ -223,11 +235,11 @@ function applyViewSettings(view) {
     if (x !== view.x || y !== view.y) win.setPosition(view.x, view.y);
   }
   win.webContents.setAudioMuted(Boolean(view.muted));
-  if (win.webContents.getZoomFactor() !== view.zoom) {
-    win.webContents.setZoomFactor(view.zoom);
-  }
-  if (win.webContents.getURL() !== view.url) {
-    win.loadURL(view.url);
+  const target = view.url || PLACEHOLDER_URL;
+  const current = win.webContents.getURL();
+  const currentIsPlaceholder = current.startsWith('data:');
+  if (view.url ? currentIsPlaceholder || current !== view.url : !currentIsPlaceholder) {
+    win.loadURL(target);
   }
 }
 
@@ -265,21 +277,35 @@ function centerView(id, displayId) {
   broadcastStatus();
 }
 
-// Put the Game window at the top-left of the display and the Stream window
-// immediately to its right. If they do not fit side by side, stack them.
+// Lay the windows out left to right from the top-left of the display,
+// wrapping to a new row when the next one would not fit.
 function arrangeViews(displayId) {
   const display = resolveDisplay(displayId);
   const area = display.workArea;
-  const [game, stream] = configStore.get().views;
-  const fitsSideBySide = game.width + stream.width <= area.width;
-  configStore.updateView(game.id, { x: area.x, y: area.y });
-  if (fitsSideBySide) {
-    configStore.updateView(stream.id, { x: area.x + game.width, y: area.y });
-  } else {
-    configStore.updateView(stream.id, { x: area.x, y: area.y + game.height });
+  let x = area.x;
+  let y = area.y;
+  let rowHeight = 0;
+  for (const view of configStore.get().views) {
+    if (x > area.x && x + view.width > area.x + area.width) {
+      x = area.x;
+      y += rowHeight;
+      rowHeight = 0;
+    }
+    configStore.updateView(view.id, { x, y });
+    x += view.width;
+    rowHeight = Math.max(rowHeight, view.height);
   }
   configStore.get().views.forEach(applyViewSettings);
   broadcastStatus();
+}
+
+// Add or remove windows to match `count`. Removed windows are closed.
+function setViewCount(count) {
+  const removed = configStore.setViewCount(count);
+  removed.forEach(closeView);
+  buildMenu();
+  broadcastStatus();
+  return configStore.get();
 }
 
 function setShowGrips(visible) {
@@ -454,10 +480,11 @@ function registerIpc() {
     return saved;
   });
   ipcMain.handle('grips:set', (_event, visible) => setShowGrips(visible));
+  ipcMain.handle('views:setCount', (_event, count) => setViewCount(count));
 
-  ipcMain.on('grip:nudge', (event, dx, dy) => {
+  ipcMain.on('grip:resize', (event, dw, dh) => {
     const id = grips.idFor(event.sender);
-    if (id && Number.isInteger(dx) && Number.isInteger(dy)) grips.nudge(id, dx, dy);
+    if (id && Number.isInteger(dw) && Number.isInteger(dh)) grips.resize(id, dw, dh);
   });
   ipcMain.on('grip:focusView', (event) => {
     const id = grips.idFor(event.sender);
@@ -468,6 +495,7 @@ function registerIpc() {
   ipcMain.handle('displays:get', () => screen.getAllDisplays().map(displaySummary));
   ipcMain.handle('app:info', () => ({
     name: APP_NAME,
+    limits: LIMITS,
     version: app.getVersion(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,

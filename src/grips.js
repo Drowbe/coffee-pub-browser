@@ -18,11 +18,16 @@ class Grips {
    * @param {object} options
    * @param {() => boolean} options.isEnabled   whether grips should be shown
    * @param {(id: string, x: number, y: number) => void} options.onViewMoved
-   *        called after a drag or nudge has moved the view, for persistence
+   *        called after a drag has moved the view, for persistence
+   * @param {(id: string, width: number, height: number) => void} options.onViewResized
+   *        called after arrow keys have resized the view, for persistence
+   * @param {{min: number, max: number}} options.sizeLimits
    */
-  constructor({ isEnabled, onViewMoved }) {
+  constructor({ isEnabled, onViewMoved, onViewResized, sizeLimits }) {
     this.isEnabled = isEnabled;
     this.onViewMoved = onViewMoved;
+    this.onViewResized = onViewResized;
+    this.sizeLimits = sizeLimits;
     /** @type {Map<string, {grip: BrowserWindow, view: BrowserWindow, label: string, mode: 'above'|'overlay', syncing: boolean}>} */
     this.entries = new Map();
   }
@@ -147,13 +152,18 @@ class Grips {
     this.sendState(id);
   }
 
-  nudge(id, dx, dy) {
+  // Grow or shrink the view's content size, keeping its top-left corner.
+  resize(id, dw, dh) {
     const entry = this.entries.get(id);
     if (!entry || !isAlive(entry.view)) return;
-    const [x, y] = entry.view.getPosition();
-    entry.view.setPosition(x + dx, y + dy);
+    const clamp = (n) => Math.min(this.sizeLimits.max, Math.max(this.sizeLimits.min, n));
+    const [w, h] = entry.view.getContentSize();
+    const width = clamp(w + dw);
+    const height = clamp(h + dh);
+    if (width === w && height === h) return;
+    entry.view.setContentSize(width, height);
     this.syncFromView(id);
-    this.onViewMoved(id, x + dx, y + dy);
+    this.onViewResized(id, width, height);
   }
 
   focusView(id) {

@@ -1,20 +1,20 @@
 # Coffee Pub Browser
 
-A standalone macOS app that wraps the FoundryVTT **Game** view and **Stream** view in two
+A standalone macOS app that wraps the FoundryVTT **Game** view and **Stream** view in
 fixed-size Chromium windows so OBS can capture each one as its own source. It is built for
 recording live Foundry sessions: the Game window shows the canvas, the Stream window shows the
-chat stream.
+chat stream. You can run one to five windows; two is the default.
 
-- Two borderless windows at the exact pixel size you configure (no title bar to crop in OBS).
+- Borderless windows at the exact pixel size you configure (no title bar to crop in OBS).
 - Stable window names (`Coffee Pub Browser - Game`, `Coffee Pub Browser - Stream`) so OBS
   Window Capture always finds them, even though Foundry keeps rewriting the page title.
-- Both windows share one login session. Log into Foundry once in the Game window.
+- All windows share one login session. Log into Foundry once in the Game window.
 - Rendering is never throttled when a window is behind other windows or unfocused, so the OBS
   source stays smooth.
-- A control panel to set URL, size, position, zoom and audio mute per window, with
-  auto-arrange and a live readout of the pixel size OBS will capture.
-- A grip bar docked above each window for dragging it around. The grip is a separate window,
-  so it never shows up in the OBS capture.
+- A control panel to set URL, size, position and audio mute per window, with auto-arrange and
+  a live readout of the pixel size OBS will capture.
+- A grip bar docked above each window for dragging it around and resizing it with the arrow
+  keys. The grip is a separate window, so it never shows up in the OBS capture.
 
 ## Requirements
 
@@ -72,20 +72,25 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
 
 ## Using it
 
-1. Launch **Coffee Pub Browser**. The control panel opens and, by default, both windows open
+1. Launch **Coffee Pub Browser**. The control panel opens and, by default, the windows open
    too.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
-   dedicated observer user works well). The Stream window shares the login.
+   dedicated observer user works well). The other windows share the login.
 3. In the control panel, set each window's **Width** and **Height** to the exact size you
    want. Changes apply live to open windows and are saved automatically.
 4. Move a window by dragging the **grip bar** docked above it. Click a grip and use the arrow
-   keys to nudge its window by 1 px (Shift+arrow for 10 px); the grip shows the current
-   position. Double-click a grip to focus its window. **Cmd+G** hides or shows all grips.
-   You can also use **Auto-arrange on display** to put the Game window at the top-left of a
-   display with the Stream window beside it, or set **X** / **Y** by hand in the panel.
-   When a window is flush with the top of the display, its grip overlaps the window's top edge
-   instead; that only affects what you see on the desktop, not the OBS capture.
-5. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
+   keys to resize its window: Right/Left change the width and Down/Up change the height by
+   1 px, or 10 px with Shift. The grip shows the current position and size. Double-click a
+   grip to focus its window. **Cmd+G** hides or shows all grips.
+   **Auto-arrange on display** lays the windows out left to right from the top-left corner of
+   a display, wrapping to a new row when they no longer fit. You can also set **X** / **Y** by
+   hand in the panel. When a window is flush with the top of the display, its grip overlaps
+   the window's top edge instead; that only affects what you see on the desktop, not the OBS
+   capture.
+5. **Number of windows** in Layout & Startup adds or removes windows, from one to five. New
+   windows start with no URL and show a placeholder until you enter one. Each window is
+   listed in OBS by its label, so give every window a different label.
+6. Closing the control panel hides it; the app keeps running so OBS keeps its sources. Reopen
    it with **Cmd+0** or by clicking the Dock icon. Quit with **Cmd+Q**.
 
 ### Add the windows to OBS
@@ -114,8 +119,8 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 | --- | --- |
 | Cmd+0 | Show the control panel |
 | Cmd+G | Show or hide the grip bars |
-| Cmd+1 / Cmd+2 | Open (or focus) the Game / Stream window |
-| Cmd+Shift+1 / Cmd+Shift+2 | Reload the Game / Stream window |
+| Cmd+1 to Cmd+5 | Open (or focus) window 1 to 5 |
+| Cmd+Shift+1 to Cmd+Shift+5 | Reload window 1 to 5 |
 | Cmd+R | Reload the focused window |
 | Alt+Cmd+I | Toggle developer tools for the focused window |
 | Cmd+Q | Quit |
@@ -128,7 +133,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "openOnLaunch": true,
   "showGrips": true,
   "views": [
@@ -140,7 +145,6 @@ Settings are stored as JSON at
       "height": 1080,
       "x": null,
       "y": null,
-      "zoom": 1,
       "muted": false,
       "enabled": true
     },
@@ -152,7 +156,6 @@ Settings are stored as JSON at
       "height": 1080,
       "x": null,
       "y": null,
-      "zoom": 1,
       "muted": true,
       "enabled": true
     }
@@ -160,14 +163,15 @@ Settings are stored as JSON at
 }
 ```
 
+`views` holds one to five entries, in the order they appear in the panel and in the menu.
+
 | Field | Meaning |
 | --- | --- |
 | `showGrips` | Show the grip bars above the windows. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
-| `url` | Page to load. Must be `http` or `https`. |
+| `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
 | `x`, `y` | Window position, or `null` to let macOS place it. |
-| `zoom` | Page zoom factor (0.25 to 5). |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
 
