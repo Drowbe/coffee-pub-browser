@@ -135,9 +135,10 @@ re-pick the window. The app fixes this by talking to OBS over its built-in WebSo
 
 1. In OBS, open **Tools > WebSocket Server Settings**, enable the server and set a password.
    Leave the port at 4455.
-2. In the control panel's **OBS** section, enter the password, click **Save password**, and
-   tick **Connect to OBS**. The section shows CONNECTED once it has connected, and reconnects
-   on its own whenever OBS is running.
+2. On the control panel's **OBS** tab, enter the password, click **Save password**, then
+   **Connect**. The tab shows CONNECTED once it has connected. Tick **Connect automatically**
+   to connect at launch and reconnect whenever the link drops; **Disconnect** pauses that
+   until you connect again.
 3. On every connection and every time one of the app's windows starts, the app points each
    linked OBS source at the window's current ID and keeps a `Coffee Pub Crop` filter on it
    that removes the app's bar. If an OBS source already captures one of the
@@ -205,10 +206,10 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 6,
+  "version": 7,
   "openOnLaunch": true,
   "showGrips": true,
-  "obs": { "enabled": false, "host": "127.0.0.1", "port": 4455 },
+  "obs": { "autoConnect": false, "host": "127.0.0.1", "port": 4455 },
   "views": [
     {
       "id": "game",
@@ -259,7 +260,7 @@ Settings are stored as JSON at
 | Field | Meaning |
 | --- | --- |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
-| `obs` | OBS WebSocket connection: `enabled`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
+| `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

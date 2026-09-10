@@ -19,10 +19,11 @@ const obsStatusEl = $('obs-status');
 const obsTagEl = $('obs-tag');
 const obsDotEl = $('obs-dot');
 const obsConnectEl = $('obs-connect');
+const obsAutoEl = $('obs-auto');
 const collapseEl = $('collapse');
 
 let config = null;
-let status = { views: [], displays: [], obs: { state: 'disabled', inputs: [] }, collapsed: false };
+let status = { views: [], displays: [], obs: { state: 'disconnected', inputs: [] }, collapsed: false };
 let limits = { minViews: 1, maxViews: 5 };
 /** @type {Map<string, HTMLElement>} */
 const cards = new Map();
@@ -164,6 +165,7 @@ function applyConfig(next) {
   renderSessionGroups();
   hideDockIconEl.checked = config.hideDockIcon;
   hideDockIconEl.disabled = !config.menuBarIcon;
+  obsAutoEl.checked = config.obs.autoConnect;
   if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
   if (document.activeElement !== obsPortEl) obsPortEl.value = String(config.obs.port);
   if (!sameViews) {
@@ -226,15 +228,15 @@ function renderDisplays() {
 }
 
 function renderObs() {
-  const o = status.obs || { state: 'disabled', inputs: [] };
+  const o = status.obs || { state: 'disconnected', inputs: [] };
   const connected = o.state === 'connected';
+  const connecting = o.state === 'connecting';
   obsTagEl.hidden = !connected;
   obsDotEl.classList.toggle('on', connected);
-  const enabled = config && config.obs.enabled;
-  obsConnectEl.textContent = enabled ? 'Disconnect' : 'Connect';
-  obsConnectEl.classList.toggle('btn-primary', !enabled);
+  obsConnectEl.textContent = connected ? 'Disconnect' : connecting ? 'Connecting...' : 'Connect';
+  obsConnectEl.disabled = connecting;
+  obsConnectEl.classList.toggle('btn-primary', !connected && !connecting);
   const labels = {
-    disabled: 'OBS connection is off.',
     disconnected: o.message || 'Not connected.',
     connecting: o.message || 'Connecting...',
     connected: o.message || 'Connected.',
@@ -259,7 +261,7 @@ function renderObs() {
 }
 
 function renderStatus() {
-  const o = status.obs || { state: 'disabled', inputs: [] };
+  const o = status.obs || { state: 'disconnected', inputs: [] };
   const connected = o.state === 'connected';
   collapseEl.textContent = status.collapsed ? 'Expand' : 'Collapse';
   collapseEl.disabled = !status.views.some((v) => v.open);
@@ -691,19 +693,30 @@ $('reset-config').addEventListener('click', async () => {
 });
 
 // --- OBS ---
-async function saveObsSettings(enabled) {
+async function saveObsSettings() {
   await flushSave();
-  status.obs = await api.obsSetSettings({
-    enabled,
+  const next = {
+    autoConnect: obsAutoEl.checked,
     host: obsHostEl.value.trim() || '127.0.0.1',
     port: Number(obsPortEl.value) || 4455,
-  });
-  config.obs = { ...config.obs, enabled, host: obsHostEl.value.trim() || '127.0.0.1', port: Number(obsPortEl.value) || 4455 };
+  };
+  config.obs = { ...config.obs, ...next };
+  status.obs = await api.obsSetSettings(next);
   renderObs();
 }
-obsHostEl.addEventListener('change', () => saveObsSettings(config.obs.enabled));
-obsPortEl.addEventListener('change', () => saveObsSettings(config.obs.enabled));
-obsConnectEl.addEventListener('click', () => saveObsSettings(!config.obs.enabled));
+obsHostEl.addEventListener('change', saveObsSettings);
+obsPortEl.addEventListener('change', saveObsSettings);
+obsAutoEl.addEventListener('change', saveObsSettings);
+obsConnectEl.addEventListener('click', async () => {
+  await flushSave();
+  try {
+    if (status.obs.state === 'connected') status.obs = await api.obsDisconnect();
+    else status.obs = await api.obsConnect();
+  } catch (err) {
+    // The status line carries the reason.
+  }
+  renderObs();
+});
 $('obs-save-password').addEventListener('click', async () => {
   status.obs = await api.obsSetPassword(obsPasswordEl.value);
   obsPasswordEl.value = '';

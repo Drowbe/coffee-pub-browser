@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 6;
+const CONFIG_VERSION = 7;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -84,7 +84,7 @@ function sanitizeRegions(value) {
 }
 
 function defaultObs() {
-  return { enabled: false, host: '127.0.0.1', port: 4455 };
+  return { autoConnect: false, host: '127.0.0.1', port: 4455 };
 }
 
 function defaultConfig() {
@@ -167,7 +167,8 @@ function sanitizeObs(input) {
   const src = input && typeof input === 'object' ? input : {};
   const host = typeof src.host === 'string' && src.host.trim() ? src.host.trim().slice(0, 200) : d.host;
   return {
-    enabled: Boolean(src.enabled),
+    // "enabled" was the pre-0.1.7 name for the same setting.
+    autoConnect: Boolean(src.autoConnect === undefined ? src.enabled : src.autoConnect),
     host,
     port: clamp(toInt(src.port, d.port), 1, 65535),
   };

@@ -17,7 +17,7 @@ const RECONNECT_MS = 10000;
 class ObsBridge extends EventEmitter {
   /**
    * @param {object} options
-   * @param {() => {enabled: boolean, host: string, port: number}} options.getSettings
+   * @param {() => {autoConnect: boolean, host: string, port: number}} options.getSettings
    * @param {() => string} options.getPassword
    */
   constructor({ getSettings, getPassword }) {
@@ -25,8 +25,9 @@ class ObsBridge extends EventEmitter {
     this.getSettings = getSettings;
     this.getPassword = getPassword;
     this.obs = new OBSWebSocket();
-    this.state = 'disabled';
+    this.state = 'disconnected';
     this.message = '';
+    this.suspended = false; // user pressed Disconnect: no auto-reconnect until Connect
     this.obsVersion = '';
     this.inputs = []; // window-capture inputs known in OBS: [{ name, window }]
     this.lastSync = null;
@@ -34,7 +35,9 @@ class ObsBridge extends EventEmitter {
     this.connecting = null;
 
     this.obs.on('ConnectionClosed', (err) => {
+      if (this.suspended) return; // our own disconnect() already reported it
       const wasConnected = this.state === 'connected';
+      this.inputs = [];
       this.setState('disconnected', wasConnected ? 'Connection to OBS closed.' : (err && err.message) || '');
       this.scheduleReconnect();
     });
@@ -63,17 +66,11 @@ class ObsBridge extends EventEmitter {
     return this.state === 'connected';
   }
 
-  // Apply the current settings: connect when enabled, disconnect otherwise.
+  // At launch: connect only when auto-connect is on.
   async start() {
-    const settings = this.getSettings();
     clearTimeout(this.reconnectTimer);
-    if (!settings.enabled) {
-      if (this.connected) await this.obs.disconnect().catch(() => {});
-      this.inputs = [];
-      this.setState('disabled', '');
-      return;
-    }
-    await this.connect();
+    if (!this.getSettings().autoConnect) return;
+    await this.connect().catch(() => {});
   }
 
   async stop() {
@@ -81,14 +78,26 @@ class ObsBridge extends EventEmitter {
     await this.obs.disconnect().catch(() => {});
   }
 
+  // User-initiated disconnect: pauses auto-reconnect until the next connect().
+  async disconnect() {
+    clearTimeout(this.reconnectTimer);
+    this.suspended = true;
+    this.inputs = [];
+    if (this.connected) {
+      await this.obs.disconnect().catch(() => {});
+    }
+    this.setState('disconnected', 'Disconnected.');
+  }
+
   scheduleReconnect() {
     clearTimeout(this.reconnectTimer);
-    if (!this.getSettings().enabled) return;
+    if (!this.getSettings().autoConnect || this.suspended) return;
     this.reconnectTimer = setTimeout(() => this.connect().catch(() => {}), RECONNECT_MS);
   }
 
   async connect() {
     if (this.connecting) return this.connecting;
+    this.suspended = false;
     const { host, port } = this.getSettings();
     this.setState('connecting', `Connecting to ${host}:${port}...`);
     this.connecting = (async () => {

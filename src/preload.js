@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('coffeePub', {
   obsSetSettings: (settings) => ipcRenderer.invoke('obs:setSettings', settings),
   obsSetPassword: (password) => ipcRenderer.invoke('obs:setPassword', password),
   obsConnect: () => ipcRenderer.invoke('obs:connect'),
+  obsDisconnect: () => ipcRenderer.invoke('obs:disconnect'),
   obsSync: () => ipcRenderer.invoke('obs:sync'),
   obsCreateSource: (id) => ipcRenderer.invoke('obs:createSource', id),
   obsLinkSource: (id, inputName) => ipcRenderer.invoke('obs:linkSource', id, inputName),

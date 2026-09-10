@@ -875,16 +875,22 @@ function registerIpc() {
   ipcMain.handle('obs:setSettings', async (_event, settings) => {
     const current = configStore.get();
     configStore.save({ ...current, obs: { ...current.obs, ...settings } });
-    await obs.start().catch(() => {});
+    // Turning auto-connect on while offline connects right away.
+    if (configStore.get().obs.autoConnect && !obs.connected) await obs.connect().catch(() => {});
+    broadcastStatus();
     return fullStatus().obs;
   });
   ipcMain.handle('obs:setPassword', async (_event, password) => {
     writeObsPassword(password);
-    if (configStore.get().obs.enabled) await obs.start().catch(() => {});
+    broadcastStatus();
     return fullStatus().obs;
   });
   ipcMain.handle('obs:connect', async () => {
     await obs.connect();
+    return fullStatus().obs;
+  });
+  ipcMain.handle('obs:disconnect', async () => {
+    await obs.disconnect();
     return fullStatus().obs;
   });
   ipcMain.handle('obs:sync', () => syncObs());
