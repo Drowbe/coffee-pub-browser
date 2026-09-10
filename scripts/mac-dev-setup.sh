@@ -81,11 +81,22 @@ brew list fnm >/dev/null 2>&1 || brew install fnm
 ok "git $(git --version | awk '{print $3}'), fnm $(fnm --version | awk '{print $2}')"
 
 step "Apps (${CASKS[*]})"
+# App bundle each cask installs, so a copy installed by hand is recognised.
+app_for_cask() {
+  case "$1" in
+    github) echo "GitHub Desktop.app" ;;
+    visual-studio-code) echo "Visual Studio Code.app" ;;
+    *) echo "" ;;
+  esac
+}
 for cask in "${CASKS[@]}"; do
+  app="$(app_for_cask "$cask")"
   if brew list --cask "$cask" >/dev/null 2>&1; then
     ok "$cask already installed"
-  else
-    brew install --cask "$cask"
+  elif [[ -n "$app" && ( -d "/Applications/$app" || -d "$HOME/Applications/$app" ) ]]; then
+    ok "$cask already installed outside Homebrew ($app)"
+  elif ! brew install --cask "$cask"; then
+    echo "   Could not install $cask with Homebrew; install it by hand if you want it. Continuing."
   fi
 done
 
