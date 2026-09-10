@@ -694,7 +694,7 @@ function expandViews() {
 function dockSize(expanded) {
   const n = configStore.get().views.length;
   if (!expanded) return { width: DOCK_WIDTH, height: 92 + n * 16 };
-  return { width: DOCK_EXPANDED, height: 190 + n * 118 };
+  return { width: DOCK_EXPANDED, height: 200 + n * 182 };
 }
 
 function dockBounds(display, expanded) {
