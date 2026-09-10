@@ -237,7 +237,77 @@ function renderStatus() {
     create.hidden = !connected;
     create.disabled = !s.open;
     create.title = s.open ? '' : 'Start the window first';
+
+    renderRegions(card, view, s, o, connected);
   }
+}
+
+function renderRegions(card, view, s, o, connected) {
+  const list = card.querySelector('[data-role="region-list"]');
+  list.textContent = '';
+  for (const region of view.regions) {
+    const li = document.createElement('li');
+    li.className = 'region';
+    li.dataset.region = region.id;
+
+    const name = document.createElement('span');
+    name.className = 'region-name';
+    name.textContent = region.name;
+    li.appendChild(name);
+
+    const geom = document.createElement('span');
+    geom.className = 'region-geom';
+    geom.textContent =
+      (region.mode === 'selector' ? `${region.selector || '(no selector)'}  ·  ` : '') +
+      `${region.x}, ${region.y}  ·  ${region.width} × ${region.height}`;
+    li.appendChild(geom);
+
+    const actions = document.createElement('span');
+    actions.className = 'region-actions';
+    if (region.obsSource) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      if (connected && !o.inputs.includes(region.obsSource)) {
+        chip.classList.add('chip-missing');
+        chip.title = 'Not found in OBS';
+      }
+      chip.append(region.obsSource);
+      const unlink = document.createElement('button');
+      unlink.type = 'button';
+      unlink.textContent = '×';
+      unlink.title = 'Forget this OBS source (does not delete it in OBS)';
+      unlink.dataset.action = 'unlink-region';
+      chip.appendChild(unlink);
+      actions.appendChild(chip);
+    } else if (connected) {
+      const create = document.createElement('button');
+      create.type = 'button';
+      create.className = 'btn btn-small';
+      create.textContent = 'Create in OBS';
+      create.dataset.action = 'create-region-source';
+      create.disabled = !s.open;
+      create.title = s.open ? 'Create a cropped window-capture source for this region' : 'Start the window first';
+      actions.appendChild(create);
+    }
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn btn-small';
+    edit.textContent = 'Edit';
+    edit.dataset.action = 'edit-region';
+    actions.appendChild(edit);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-small btn-danger';
+    remove.textContent = 'Remove';
+    remove.dataset.action = 'remove-region';
+    actions.appendChild(remove);
+    li.appendChild(actions);
+    list.appendChild(li);
+  }
+  list.hidden = view.regions.length === 0;
+  const add = card.querySelector('[data-action="add-region"]');
+  add.disabled = !s.open;
+  add.title = s.open ? '' : 'Start the window first';
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +353,35 @@ async function onCardClick(event) {
   if (!button) return;
   await flushSave();
   const s = status.views.find((v) => v.id === id) || { open: false };
+  const regionEl = event.target.closest('[data-region]');
+  const regionId = regionEl ? regionEl.dataset.region : null;
+  const view = config.views.find((v) => v.id === id);
   try {
+    switch (button.dataset.action) {
+      case 'add-region':
+        await openPicker(id, null);
+        return;
+      case 'edit-region':
+        await openPicker(id, view.regions.find((r) => r.id === regionId) || null);
+        return;
+      case 'remove-region': {
+        const region = view.regions.find((r) => r.id === regionId);
+        if (region && window.confirm(`Remove region "${region.name}"? Its OBS source, if any, stays in OBS.`)) {
+          await api.removeRegion(id, regionId);
+        }
+        return;
+      }
+      case 'create-region-source':
+        await api.obsCreateRegionSource(id, regionId);
+        return;
+      case 'unlink-region': {
+        const region = view.regions.find((r) => r.id === regionId);
+        if (region) await api.saveRegion(id, { ...region, obsSource: '' });
+        return;
+      }
+      default:
+        break;
+    }
     switch (button.dataset.action) {
       case 'toggle':
         if (s.open) await api.closeView(id);
@@ -435,6 +533,189 @@ api.onStatus((next) => {
   renderDisplays();
   renderObs();
   renderStatus();
+});
+
+// ---------------------------------------------------------------------------
+// Region picker
+// ---------------------------------------------------------------------------
+
+const picker = {
+  el: document.getElementById('picker'),
+  title: document.getElementById('picker-title'),
+  img: document.getElementById('picker-img'),
+  wrap: document.getElementById('snapshot-wrap'),
+  sel: document.getElementById('picker-sel'),
+  name: document.getElementById('region-name'),
+  selectorField: document.getElementById('selector-field'),
+  selector: document.getElementById('region-selector'),
+  measureWarning: document.getElementById('measure-warning'),
+  x: document.getElementById('region-x'),
+  y: document.getElementById('region-y'),
+  w: document.getElementById('region-w'),
+  h: document.getElementById('region-h'),
+  statusEl: document.getElementById('picker-status'),
+  viewId: null,
+  regionId: null,
+  size: { width: 1, height: 1 }, // window content size in points
+  drag: null,
+};
+
+function pickerMode() {
+  return document.querySelector('input[name="region-mode"]:checked').value;
+}
+
+function pickerRect() {
+  return {
+    x: Math.max(0, Math.round(Number(picker.x.value) || 0)),
+    y: Math.max(0, Math.round(Number(picker.y.value) || 0)),
+    width: Math.max(1, Math.round(Number(picker.w.value) || 1)),
+    height: Math.max(1, Math.round(Number(picker.h.value) || 1)),
+  };
+}
+
+function setPickerRect(rect) {
+  picker.x.value = String(rect.x);
+  picker.y.value = String(rect.y);
+  picker.w.value = String(rect.width);
+  picker.h.value = String(rect.height);
+  drawSelection();
+}
+
+// Map window points to the displayed snapshot and back.
+function pointsToPx() {
+  return picker.img.clientWidth / picker.size.width;
+}
+
+function drawSelection() {
+  const k = pointsToPx();
+  const r = pickerRect();
+  if (!k || !Number.isFinite(k)) return;
+  picker.sel.hidden = false;
+  picker.sel.style.left = `${r.x * k}px`;
+  picker.sel.style.top = `${r.y * k}px`;
+  picker.sel.style.width = `${r.width * k}px`;
+  picker.sel.style.height = `${r.height * k}px`;
+}
+
+async function loadSnapshot() {
+  picker.statusEl.textContent = 'Taking snapshot...';
+  try {
+    const snap = await api.snapshotView(picker.viewId);
+    picker.size = { width: snap.width, height: snap.height };
+    await new Promise((resolve) => {
+      picker.img.onload = resolve;
+      picker.img.onerror = resolve;
+      picker.img.src = snap.dataUrl;
+    });
+    picker.statusEl.textContent = `Window is ${snap.width} × ${snap.height}.`;
+  } catch (err) {
+    picker.statusEl.textContent = err.message.replace(/^.*Error: /, '');
+  }
+  drawSelection();
+}
+
+async function openPicker(viewId, region) {
+  const view = config.views.find((v) => v.id === viewId);
+  picker.viewId = viewId;
+  picker.regionId = region ? region.id : null;
+  picker.title.textContent = region ? `Edit region on ${view.label}` : `New region on ${view.label}`;
+  picker.name.value = region ? region.name : `Region ${view.regions.length + 1}`;
+  document.querySelector(`input[name="region-mode"][value="${region ? region.mode : 'rect'}"]`).checked = true;
+  picker.selector.value = region ? region.selector : '';
+  picker.measureWarning.hidden = true;
+  picker.selectorField.hidden = pickerMode() !== 'selector';
+  picker.sel.hidden = true;
+  picker.img.removeAttribute('src');
+  picker.el.hidden = false;
+  await loadSnapshot();
+  setPickerRect(region || { x: 0, y: 0, width: Math.round(picker.size.width / 2), height: Math.round(picker.size.height / 2) });
+  picker.name.focus();
+}
+
+function closePicker() {
+  picker.el.hidden = true;
+  picker.viewId = null;
+  picker.drag = null;
+}
+
+document.getElementById('picker-close').addEventListener('click', closePicker);
+picker.el.addEventListener('click', (event) => {
+  if (event.target === picker.el) closePicker();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !picker.el.hidden) closePicker();
+});
+document.getElementById('picker-refresh').addEventListener('click', loadSnapshot);
+for (const radio of document.querySelectorAll('input[name="region-mode"]')) {
+  radio.addEventListener('change', () => {
+    picker.selectorField.hidden = pickerMode() !== 'selector';
+  });
+}
+for (const input of [picker.x, picker.y, picker.w, picker.h]) {
+  input.addEventListener('input', drawSelection);
+}
+window.addEventListener('resize', () => {
+  if (!picker.el.hidden) drawSelection();
+});
+
+document.getElementById('region-measure').addEventListener('click', async () => {
+  picker.measureWarning.hidden = true;
+  const rect = await api.measureView(picker.viewId, picker.selector.value).catch(() => null);
+  if (!rect) {
+    picker.measureWarning.hidden = false;
+    return;
+  }
+  setPickerRect(rect);
+});
+
+// Drag a rectangle on the snapshot.
+function snapshotPoint(event) {
+  const bounds = picker.img.getBoundingClientRect();
+  const k = pointsToPx();
+  const x = Math.min(picker.size.width, Math.max(0, (event.clientX - bounds.left) / k));
+  const y = Math.min(picker.size.height, Math.max(0, (event.clientY - bounds.top) / k));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+picker.wrap.addEventListener('mousedown', (event) => {
+  if (event.button !== 0 || !picker.img.clientWidth) return;
+  picker.drag = snapshotPoint(event);
+  event.preventDefault();
+});
+window.addEventListener('mousemove', (event) => {
+  if (!picker.drag) return;
+  const p = snapshotPoint(event);
+  const x = Math.min(picker.drag.x, p.x);
+  const y = Math.min(picker.drag.y, p.y);
+  setPickerRect({ x, y, width: Math.max(1, Math.abs(p.x - picker.drag.x)), height: Math.max(1, Math.abs(p.y - picker.drag.y)) });
+});
+window.addEventListener('mouseup', () => {
+  picker.drag = null;
+});
+
+document.getElementById('picker-save').addEventListener('click', async () => {
+  const mode = pickerMode();
+  const region = {
+    id: picker.regionId || undefined,
+    name: picker.name.value.trim() || 'Region',
+    mode,
+    selector: mode === 'selector' ? picker.selector.value.trim() : '',
+    ...pickerRect(),
+  };
+  if (mode === 'selector' && !region.selector) {
+    picker.measureWarning.textContent = 'Enter a selector.';
+    picker.measureWarning.hidden = false;
+    return;
+  }
+  const existing = picker.regionId
+    ? (config.views.find((v) => v.id === picker.viewId) || { regions: [] }).regions.find((r) => r.id === picker.regionId)
+    : null;
+  if (existing) region.obsSource = existing.obsSource;
+  try {
+    await api.saveRegion(picker.viewId, region);
+    closePicker();
+  } catch (err) {
+    picker.statusEl.textContent = err.message.replace(/^.*Error: /, '');
+  }
 });
 
 // ---------------------------------------------------------------------------

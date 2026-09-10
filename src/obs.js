@@ -10,6 +10,8 @@ const { OBSWebSocket } = require('obs-websocket-js/json');
 
 const INPUT_KIND = 'screen_capture'; // macOS Screen Capture (ScreenCaptureKit)
 const CAPTURE_TYPE_WINDOW = 1; // settings.type: 0 display, 1 window, 2 application
+const CROP_FILTER_KIND = 'crop_filter'; // OBS "Crop/Pad"
+const CROP_FILTER_NAME = 'Coffee Pub Crop';
 const RECONNECT_MS = 10000;
 
 class ObsBridge extends EventEmitter {
@@ -148,6 +150,24 @@ class ObsBridge extends EventEmitter {
     });
   }
 
+  // Create or update the crop filter on a region's input. Crop values are in
+  // captured pixels: { left, top, right, bottom }.
+  async ensureCropFilter(inputName, crop) {
+    const filterSettings = { left: crop.left, top: crop.top, right: crop.right, bottom: crop.bottom, relative: true };
+    let exists = false;
+    try {
+      await this.obs.call('GetSourceFilter', { sourceName: inputName, filterName: CROP_FILTER_NAME });
+      exists = true;
+    } catch (err) {
+      exists = false;
+    }
+    if (exists) {
+      await this.obs.call('SetSourceFilterSettings', { sourceName: inputName, filterName: CROP_FILTER_NAME, filterSettings, overlay: true });
+    } else {
+      await this.obs.call('CreateSourceFilter', { sourceName: inputName, filterName: CROP_FILTER_NAME, filterKind: CROP_FILTER_KIND, filterSettings });
+    }
+  }
+
   async createInput(inputName, windowId) {
     const { currentProgramSceneName } = await this.obs.call('GetCurrentProgramScene');
     await this.obs.call('CreateInput', {
@@ -165,15 +185,16 @@ class ObsBridge extends EventEmitter {
    * Point every linked OBS input at the current window ID of its app window
    * and detect inputs that already point at one of our windows.
    *
-   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[]}>} views
-   * @returns {Promise<{pointed: string[], missing: string[], detected: Array<{id: string, input: string}>}>}
+   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[],
+   *   regions: Array<{name: string, obsSource: string, crop: {left: number, top: number, right: number, bottom: number}}>}>} views
+   * @returns {Promise<{pointed: string[], cropped: string[], missing: string[], detected: Array<{id: string, input: string}>}>}
    */
   async syncViews(views) {
     if (!this.connected) throw new Error('Not connected to OBS.');
     await this.refreshInputs();
     const choices = await this.windowChoices().catch(() => []);
     const known = new Set(this.inputs.map((i) => i.name));
-    const report = { pointed: [], missing: [], detected: [] };
+    const report = { pointed: [], cropped: [], missing: [], detected: [] };
 
     // Prefer the window ID OBS itself reports for our title; fall back to
     // the ID Electron knows.
@@ -192,7 +213,8 @@ class ObsBridge extends EventEmitter {
           if (!takenElsewhere) report.detected.push({ id: view.id, input: input.name });
         }
       }
-      for (const name of view.sources) {
+      const regionSources = view.regions.filter((r) => r.obsSource).map((r) => r.obsSource);
+      for (const name of [...view.sources, ...regionSources]) {
         if (!known.has(name)) {
           report.missing.push(name);
           continue;
@@ -202,6 +224,11 @@ class ObsBridge extends EventEmitter {
         if (current && current.window === windowId) continue;
         await this.pointInput(name, windowId);
         report.pointed.push(name);
+      }
+      for (const region of view.regions) {
+        if (!region.obsSource || !known.has(region.obsSource) || !region.crop) continue;
+        await this.ensureCropFilter(region.obsSource, region.crop);
+        report.cropped.push(region.obsSource);
       }
     }
     this.lastSync = { at: Date.now(), ...report };

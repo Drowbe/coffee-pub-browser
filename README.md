@@ -17,6 +17,8 @@ chat stream. You can run one to five windows; two is the default.
   keys. The grip is a separate window, so it never shows up in the OBS capture.
 - An OBS connection that keeps your window-capture sources pointed at these windows after
   every launch, so you never have to re-pick a window in OBS, and creates sources for you.
+- Named regions: mark part of a window, by drawing a rectangle on a snapshot or by naming a
+  CSS selector, and the app creates a cropped OBS source for it and keeps the crop current.
 
 ## Requirements
 
@@ -130,6 +132,27 @@ re-pick the window. The app fixes this by talking to OBS over its built-in WebSo
 The password is stored encrypted with the macOS keychain, separate from the config file. The
 app and OBS have to run on the same Mac, since OBS can only capture windows on its own machine.
 
+### Regions: part of a window as its own OBS source
+
+If a window shows several things you want as separate OBS sources, for example a scoreboard
+and a status panel pinned inside the Stream view, define a **region** for each.
+
+1. With the window started, click **Add region** on its card. A snapshot of the window opens.
+2. Drag a rectangle on the snapshot, or type X, Y, Width and Height in window points. Give the
+   region a name.
+3. For an element your own module renders, pick **CSS selector** instead, enter the selector
+   (for example `#scoreboard`) and click **Measure**. The app reads the element's position from
+   the page, and re-measures it on every OBS sync so the crop follows the element.
+4. Click **Save region**, then **Create in OBS**. The app adds a window-capture source named
+   after the window and region, such as `Stream - Scoreboard`, with a **Crop/Pad** filter
+   called `Coffee Pub Crop` that isolates the region. Drop that source into any scene.
+
+On every sync the app re-points the region's source at the window and updates the crop
+values, including the Retina factor, so resizing the window or editing the region keeps the
+OBS source correct. Removing a region in the app leaves the source in OBS; delete it there if
+you no longer need it. Only elements that stay in a fixed place work well; a chat message that
+scrolls away cannot be followed by a crop.
+
 ### Retina displays
 
 On a Retina display macOS renders 2 physical pixels per point, so a 1920 x 1080 window is
@@ -158,7 +181,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "enabled": false, "host": "127.0.0.1", "port": 4455 },
@@ -173,7 +196,8 @@ Settings are stored as JSON at
       "y": null,
       "muted": false,
       "enabled": true,
-      "obsSources": ["GAME SCREEN"]
+      "obsSources": ["GAME SCREEN"],
+      "regions": []
     },
     {
       "id": "stream",
@@ -185,7 +209,20 @@ Settings are stored as JSON at
       "y": null,
       "muted": true,
       "enabled": true,
-      "obsSources": []
+      "obsSources": ["CHAT CAPTURE"],
+      "regions": [
+        {
+          "id": "region1",
+          "name": "Scoreboard",
+          "mode": "selector",
+          "selector": "#scoreboard",
+          "x": 0,
+          "y": 0,
+          "width": 600,
+          "height": 200,
+          "obsSource": "Stream - Scoreboard"
+        }
+      ]
     }
   ]
 }
@@ -202,6 +239,7 @@ Settings are stored as JSON at
 | `width`, `height` | Content size in points (100 to 7680). |
 | `x`, `y` | Window position, written by the app when you move the window; `null` lets macOS place it. |
 | `obsSources` | Names of OBS window-capture sources that follow this window. |
+| `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains. |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
 

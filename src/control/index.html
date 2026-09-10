@@ -161,9 +161,67 @@
             <button class="btn btn-small" data-action="create-source" type="button">Create in OBS</button>
           </span>
         </div>
+        <div class="details-row details-row-top">
+          <span class="details-key">Regions</span>
+          <span class="details-value regions">
+            <ul class="region-list" data-role="region-list"></ul>
+            <button class="btn btn-small" data-action="add-region" type="button" title="Define a part of this window as its own OBS source">Add region</button>
+          </span>
+        </div>
       </div>
     </article>
   </template>
+
+  <div id="picker" class="modal" hidden>
+    <div class="modal-box">
+      <header class="modal-head">
+        <h2 id="picker-title">Region</h2>
+        <button id="picker-close" class="btn btn-small" type="button">Cancel</button>
+      </header>
+      <div class="picker-body">
+        <div class="snapshot-col">
+          <div id="snapshot-wrap" class="snapshot-wrap">
+            <img id="picker-img" alt="Window snapshot" draggable="false">
+            <div id="picker-sel" class="sel" hidden></div>
+          </div>
+          <p class="hint">Drag on the snapshot to draw the region, or type the numbers. Sizes are in window points.</p>
+        </div>
+        <div class="picker-form">
+          <label class="field">
+            <span>Name</span>
+            <input id="region-name" type="text" maxlength="40">
+          </label>
+          <div class="field">
+            <span>Defined by</span>
+            <div class="radio-row">
+              <label class="check"><input type="radio" name="region-mode" value="rect" checked><span>Rectangle</span></label>
+              <label class="check"><input type="radio" name="region-mode" value="selector"><span>CSS selector</span></label>
+            </div>
+          </div>
+          <div class="field" id="selector-field" hidden>
+            <span>Selector</span>
+            <div class="row">
+              <input id="region-selector" type="text" spellcheck="false" placeholder="#scoreboard">
+              <button id="region-measure" class="btn btn-small" type="button">Measure</button>
+            </div>
+            <small class="hint">The element is re-measured on every OBS sync, so the crop follows it.</small>
+            <small class="field-warning" id="measure-warning" hidden>Element not found in the page.</small>
+          </div>
+          <div class="grid grid-2">
+            <label class="field"><span>X</span><input id="region-x" type="number" min="0" step="1"></label>
+            <label class="field"><span>Y</span><input id="region-y" type="number" min="0" step="1"></label>
+            <label class="field"><span>Width</span><input id="region-w" type="number" min="1" step="1"></label>
+            <label class="field"><span>Height</span><input id="region-h" type="number" min="1" step="1"></label>
+          </div>
+          <p class="hint" id="picker-status"></p>
+          <div class="row picker-actions">
+            <button id="picker-refresh" class="btn btn-small" type="button">Refresh snapshot</button>
+            <button id="picker-save" class="btn btn-primary" type="button">Save region</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="control.js"></script>
 </body>

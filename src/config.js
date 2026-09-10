@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 3;
+const CONFIG_VERSION = 4;
 
 const LIMITS = {
   minSize: 100,
@@ -35,7 +35,38 @@ function defaultView(index) {
     muted: seed ? seed.muted : true,
     enabled: true,
     obsSources: [],
+    regions: [],
   };
+}
+
+const REGION_LIMITS = { maxRegions: 12, maxSelector: 300 };
+
+// A region is a named rectangle inside a window, in window points. In
+// selector mode the rectangle is re-measured from the page element.
+function sanitizeRegion(input, index, taken) {
+  const src = input && typeof input === 'object' ? input : {};
+  let id = sanitizeId(src.id, `region${index + 1}`);
+  let n = 2;
+  while (taken.has(id)) id = `region${index + 1}-${n++}`;
+  taken.add(id);
+  const positive = (v, fallback) => Math.max(0, toInt(v, fallback));
+  return {
+    id,
+    name: typeof src.name === 'string' && src.name.trim() ? src.name.trim().slice(0, 40) : `Region ${index + 1}`,
+    mode: src.mode === 'selector' ? 'selector' : 'rect',
+    selector: typeof src.selector === 'string' ? src.selector.trim().slice(0, REGION_LIMITS.maxSelector) : '',
+    x: positive(src.x, 0),
+    y: positive(src.y, 0),
+    width: Math.max(1, toInt(src.width, 100)),
+    height: Math.max(1, toInt(src.height, 100)),
+    obsSource: typeof src.obsSource === 'string' ? src.obsSource.trim().slice(0, 200) : '',
+  };
+}
+
+function sanitizeRegions(value) {
+  if (!Array.isArray(value)) return [];
+  const taken = new Set();
+  return value.slice(0, REGION_LIMITS.maxRegions).map((r, i) => sanitizeRegion(r, i, taken));
 }
 
 function defaultObs() {
@@ -95,6 +126,7 @@ function sanitizeView(input, index) {
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
     obsSources: sanitizeSources(src.obsSources),
+    regions: sanitizeRegions(src.regions),
   };
 }
 
@@ -198,6 +230,34 @@ class ConfigStore {
     return this.save({ ...this.data, views });
   }
 
+  getRegion(viewId, regionId) {
+    const view = this.getView(viewId);
+    return view ? view.regions.find((r) => r.id === regionId) || null : null;
+  }
+
+  // Add (no id / unknown id) or replace a region on a view. Returns the saved region.
+  saveRegion(viewId, region) {
+    const view = this.getView(viewId);
+    if (!view) throw new Error(`Unknown view: ${viewId}`);
+    const regions = view.regions.slice();
+    const index = regions.findIndex((r) => r.id === region.id);
+    if (index >= 0) {
+      regions[index] = { ...regions[index], ...region, id: regions[index].id };
+    } else {
+      if (regions.length >= REGION_LIMITS.maxRegions) throw new Error(`At most ${REGION_LIMITS.maxRegions} regions per window.`);
+      regions.push({ ...region, id: undefined });
+    }
+    const saved = this.updateView(viewId, { regions });
+    const savedView = saved.views.find((v) => v.id === viewId);
+    return index >= 0 ? savedView.regions[index] : savedView.regions[savedView.regions.length - 1];
+  }
+
+  removeRegion(viewId, regionId) {
+    const view = this.getView(viewId);
+    if (!view) return;
+    this.updateView(viewId, { regions: view.regions.filter((r) => r.id !== regionId) });
+  }
+
   // Grow or shrink the list of views to `count`. New views get defaults;
   // removed views are dropped from the end. Returns the ids that were removed.
   setViewCount(count) {
@@ -218,4 +278,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, CONFIG_VERSION };
+module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION };

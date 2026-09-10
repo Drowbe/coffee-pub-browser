@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { app, BrowserWindow, ipcMain, screen, shell, Menu, session, dialog, safeStorage } = require('electron');
-const { ConfigStore, LIMITS } = require('./config');
+const { ConfigStore, LIMITS, REGION_LIMITS } = require('./config');
 const { Grips } = require('./grips');
 const { ObsBridge } = require('./obs');
 
@@ -171,17 +171,88 @@ function systemWindowId(win) {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-// Point every linked OBS source at the current windows. Newly detected
-// links are saved so they are re-pointed automatically from then on.
+// Measure a page element inside a view window: { x, y, width, height } in
+// window points, or null when the element is not found.
+async function measureSelector(win, selector) {
+  if (!isAlive(win) || typeof selector !== 'string' || !selector.trim()) return null;
+  const code = `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, width: r.width, height: r.height };
+  })()`;
+  try {
+    const rect = await win.webContents.executeJavaScript(code, true);
+    if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+    return {
+      x: Math.max(0, Math.round(rect.x)),
+      y: Math.max(0, Math.round(rect.y)),
+      width: Math.max(1, Math.round(rect.width)),
+      height: Math.max(1, Math.round(rect.height)),
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+// Crop/Pad values (captured pixels) that isolate a region of a view window.
+function cropFor(win, region) {
+  if (!isAlive(win)) return null;
+  const [w, h] = win.getContentSize();
+  const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+  const x = Math.min(region.x, w);
+  const y = Math.min(region.y, h);
+  const width = Math.max(1, Math.min(region.width, w - x));
+  const height = Math.max(1, Math.min(region.height, h - y));
+  return {
+    left: Math.round(x * sf),
+    top: Math.round(y * sf),
+    right: Math.round((w - x - width) * sf),
+    bottom: Math.round((h - y - height) * sf),
+  };
+}
+
+// Re-measure selector regions of an open view and save any changes.
+async function refreshRegions(view) {
+  const win = viewWindows.get(view.id);
+  if (!isAlive(win)) return view.regions;
+  let changed = false;
+  const regions = [];
+  for (const region of view.regions) {
+    if (region.mode !== 'selector') {
+      regions.push(region);
+      continue;
+    }
+    const rect = await measureSelector(win, region.selector);
+    if (rect && (rect.x !== region.x || rect.y !== region.y || rect.width !== region.width || rect.height !== region.height)) {
+      regions.push({ ...region, ...rect });
+      changed = true;
+    } else {
+      regions.push(region);
+    }
+  }
+  if (changed) configStore.updateView(view.id, { regions });
+  return regions;
+}
+
+// Point every linked OBS source at the current windows and keep region
+// crops current. Newly detected links are saved so they are re-pointed
+// automatically from then on.
 let obsSyncTimer = null;
 async function syncObs() {
   if (!obs.connected) return null;
-  const views = configStore.get().views.map((view) => ({
-    id: view.id,
-    title: windowTitle(view),
-    windowId: systemWindowId(viewWindows.get(view.id)),
-    sources: view.obsSources,
-  }));
+  const views = [];
+  for (const view of configStore.get().views) {
+    const win = viewWindows.get(view.id);
+    const regions = await refreshRegions(view);
+    views.push({
+      id: view.id,
+      title: windowTitle(view),
+      windowId: systemWindowId(win),
+      sources: view.obsSources,
+      regions: regions.map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
+    });
+  }
   const report = await obs.syncViews(views);
   for (const { id, input } of report.detected) {
     const view = configStore.getView(id);
@@ -277,7 +348,10 @@ function createViewWindow(view) {
     configStore.updateView(view.id, { x, y });
     broadcastStatus();
   });
-  win.on('resize', broadcastStatus);
+  win.on('resize', () => {
+    broadcastStatus();
+    scheduleObsSync();
+  });
   win.on('closed', () => {
     viewWindows.delete(view.id);
     broadcastStatus();
@@ -590,6 +664,48 @@ function registerIpc() {
     }
     await syncObs().catch(() => {});
     broadcastStatus();
+  });
+  // --- Regions ---
+  ipcMain.handle('view:snapshot', async (_event, id) => {
+    const win = viewWindows.get(id);
+    if (!isAlive(win) || !win.isVisible()) throw new Error('Start the window first.');
+    const [width, height] = win.getContentSize();
+    const image = await win.webContents.capturePage();
+    return { dataUrl: image.toJPEG(80).length ? `data:image/jpeg;base64,${image.toJPEG(80).toString('base64')}` : image.toDataURL(), width, height };
+  });
+  ipcMain.handle('view:measure', async (_event, id, selector) => {
+    const win = viewWindows.get(id);
+    if (!isAlive(win)) throw new Error('Start the window first.');
+    return measureSelector(win, selector);
+  });
+  ipcMain.handle('regions:save', async (_event, id, region) => {
+    getView(id);
+    const saved = configStore.saveRegion(id, region && typeof region === 'object' ? region : {});
+    scheduleObsSync();
+    broadcastStatus();
+    return saved;
+  });
+  ipcMain.handle('regions:remove', (_event, id, regionId) => {
+    configStore.removeRegion(id, regionId);
+    broadcastStatus();
+  });
+  ipcMain.handle('regions:limits', () => REGION_LIMITS);
+  ipcMain.handle('obs:createRegionSource', async (_event, id, regionId) => {
+    const view = getView(id);
+    const region = configStore.getRegion(id, regionId);
+    if (!region) throw new Error('Unknown region.');
+    const win = viewWindows.get(id);
+    const windowId = systemWindowId(win);
+    if (!windowId) throw new Error('Start the window first so OBS can capture it.');
+    let name = `${view.label} - ${region.name}`;
+    const taken = new Set(obs.status().inputs);
+    let n = 2;
+    while (taken.has(name)) name = `${view.label} - ${region.name} ${n++}`;
+    await obs.createInput(name, windowId);
+    await obs.ensureCropFilter(name, cropFor(win, region));
+    configStore.saveRegion(id, { ...region, obsSource: name });
+    broadcastStatus();
+    return name;
   });
   ipcMain.handle('obs:unlinkSource', (_event, id, inputName) => {
     const view = getView(id);
