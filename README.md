@@ -22,12 +22,14 @@ chat stream.
 
 ## Get the app
 
-### Option A: download a build from GitHub Actions
+### Option A: download a release (easiest)
 
-Every push runs the **Build macOS app** workflow on a macOS runner. Open the repository's
-**Actions** tab, pick the latest green run, and download the **Coffee-Pub-Browser-macOS**
-artifact. Unzip it to get the `.dmg`, then follow [First launch](#first-launch-unsigned-build)
-below. Pushing a tag like `v1.0.0` also attaches the files to a GitHub Release.
+Go to the repository's **Releases** page and download the `.dmg` attached to the latest
+release, then follow [First launch](#first-launch-unsigned-build) below.
+
+Every push also runs the **Build macOS app** workflow on a macOS runner. If you need a build
+from a branch that has not been released, open the **Actions** tab, pick the run, and download
+the **Coffee-Pub-Browser-macOS** artifact (a zip containing the `.dmg`).
 
 ### Option B: build it yourself
 
@@ -159,6 +161,19 @@ Settings are stored as JSON at
 | `zoom` | Page zoom factor (0.25 to 5). |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
+
+## Releasing a new version
+
+1. Bump `version` in `package.json` and commit.
+2. Tag the commit and push the tag:
+
+   ```bash
+   git tag v1.1.0
+   git push origin v1.1.0
+   ```
+
+3. The workflow builds the app on a macOS runner and creates a GitHub Release named after the
+   tag with the `.dmg` attached and auto-generated notes. It takes about five minutes.
 
 ## Project layout
 
