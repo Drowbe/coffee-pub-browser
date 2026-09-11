@@ -107,7 +107,12 @@ function defaultObs() {
 const TAVERN_MODES = ['auto', 'video', 'avatar'];
 
 function defaultTavern() {
-  return { url: '', login: '', autoConnect: true, width: 640, height: 360, mode: 'auto', audio: false, plate: false, players: {} };
+  return {
+    url: '', login: '', autoConnect: true,
+    width: 640, height: 360, lockRatio: true, mode: 'auto', audio: false, plate: false, border: true,
+    indicator: false, statusWidth: 256, statusHeight: 256,
+    players: {},
+  };
 }
 
 function sanitizeTavern(input) {
@@ -119,11 +124,12 @@ function sanitizeTavern(input) {
       if (!/^[a-z0-9]{4,16}$/.test(key) || !value || typeof value !== 'object') continue;
       players[key] = {
         source: typeof value.source === 'string' ? value.source.trim().slice(0, 200) : '',
+        statusSource: typeof value.statusSource === 'string' ? value.statusSource.trim().slice(0, 200) : '',
         mode: TAVERN_MODES.includes(value.mode) ? value.mode : '',
         audio: value.audio === true || value.audio === false ? value.audio : null,
         plate: value.plate === true || value.plate === false ? value.plate : null,
       };
-      if (!players[key].source) delete players[key];
+      if (!players[key].source && !players[key].statusSource) delete players[key];
     }
   }
   return {
@@ -132,9 +138,14 @@ function sanitizeTavern(input) {
     autoConnect: src.autoConnect === undefined ? d.autoConnect : Boolean(src.autoConnect),
     width: clamp(toInt(src.width, d.width), 64, 3840),
     height: clamp(toInt(src.height, d.height), 64, 2160),
+    lockRatio: src.lockRatio === undefined ? d.lockRatio : Boolean(src.lockRatio),
     mode: TAVERN_MODES.includes(src.mode) ? src.mode : d.mode,
     audio: src.audio === undefined ? d.audio : Boolean(src.audio),
     plate: src.plate === undefined ? d.plate : Boolean(src.plate),
+    border: src.border === undefined ? d.border : Boolean(src.border),
+    indicator: src.indicator === undefined ? d.indicator : Boolean(src.indicator),
+    statusWidth: clamp(toInt(src.statusWidth, d.statusWidth), 32, 3840),
+    statusHeight: clamp(toInt(src.statusHeight, d.statusHeight), 32, 2160),
     players,
   };
 }

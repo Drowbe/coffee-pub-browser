@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('coffeePub', {
   tavernUnpublish: (key, removeFromObs) => ipcRenderer.invoke('tavern:unpublish', key, removeFromObs),
   tavernPublishAll: () => ipcRenderer.invoke('tavern:publishAll'),
   tavernUnpublishAll: (removeFromObs) => ipcRenderer.invoke('tavern:unpublishAll', removeFromObs),
+  tavernIndicator: (key, on) => ipcRenderer.invoke('tavern:indicator', key, on),
   tavernViewUrl: (key) => ipcRenderer.invoke('tavern:viewUrl', key),
   tavernKick: (key) => ipcRenderer.invoke('tavern:kick', key),
   tavernMute: (key) => ipcRenderer.invoke('tavern:mute', key),

@@ -167,6 +167,9 @@
             <span>Height</span>
             <input id="tavern-height" type="number" min="64" max="2160" step="1" size="5">
           </label>
+          <label class="check" title="Keep width and height at 16:9, the shape of the camera"><input id="tavern-lock" type="checkbox"><span>Constrain proportions</span></label>
+        </div>
+        <div class="row">
           <label class="field field-inline">
             <span>Show</span>
             <select id="tavern-mode">
@@ -175,9 +178,23 @@
               <option value="avatar">Images only</option>
             </select>
           </label>
-          <label class="check"><input id="tavern-audio" type="checkbox"><span>Audio through OBS</span></label>
-          <label class="check"><input id="tavern-plate" type="checkbox"><span>Name plate</span></label>
+          <label class="check" title="The player's voice plays through this Browser Source, so it is recorded and shows as its own track in the OBS mixer. Off: the source is silent and you take their voice from elsewhere."><input id="tavern-audio" type="checkbox"><span>Include their audio in OBS</span></label>
+          <label class="check" title="Their display name in the corner of the source"><input id="tavern-plate" type="checkbox"><span>Name plate</span></label>
+          <label class="check" title="A green frame around the source while they speak, like the highlight at the table"><input id="tavern-border" type="checkbox"><span>Talking border</span></label>
         </div>
+        <div class="row">
+          <span class="field-label">Talking indicator</span>
+          <label class="field field-inline">
+            <span>Width</span>
+            <input id="tavern-status-width" type="number" min="32" max="3840" step="1" size="5">
+          </label>
+          <label class="field field-inline">
+            <span>Height</span>
+            <input id="tavern-status-height" type="number" min="32" max="2160" step="1" size="5">
+          </label>
+          <label class="check" title="A second, transparent source per player that shows their Talking image while they speak and their Muted image while their microphone is off. Overlay it on a character bar."><input id="tavern-indicator" type="checkbox"><span>Publish an indicator with each player</span></label>
+        </div>
+        <p class="hint">The indicator is a second source that stays transparent until the player talks (their Talking image) or mutes (their Muted image). Set those images on the Tavern's manage page.</p>
         <p class="hint" id="tavern-status">Not signed in.</p>
       </div>
     </section>
@@ -186,7 +203,7 @@
       <div class="card">
         <div class="view-head">
           <div class="view-head-left">
-            <h2 id="tavern-title">The party</h2>
+            <h2 id="tavern-title">Users</h2>
             <span class="hint" id="tavern-summary"></span>
           </div>
           <div class="view-actions">
@@ -195,7 +212,7 @@
             <button id="tavern-sync" class="btn" type="button" title="Make OBS match: create, re-point and rename the Tavern sources">Sync OBS</button>
           </div>
         </div>
-        <p class="hint" id="tavern-empty">Sign in to the Tavern on the Session tab to see the party here.</p>
+        <p class="hint" id="tavern-empty">Sign in to the Tavern on the Session tab to see its users here.</p>
         <div id="tavern-party" class="party"></div>
         <p class="hint" id="tavern-sync-note"></p>
       </div>
@@ -328,6 +345,7 @@
       </div>
       <div class="player-actions">
         <button class="btn btn-small btn-primary" data-action="publish" type="button">Publish</button>
+        <button class="btn btn-small" data-action="indicator" type="button" title="A second source with only the talking and muted images, for overlaying a character bar">Indicator</button>
         <button class="btn btn-small" data-action="copy-link" type="button" title="Copy the OBS view link">Copy link</button>
         <button class="btn btn-small" data-action="mute" type="button" title="Mute their microphone at the table" hidden>Mute</button>
         <button class="btn btn-small btn-danger" data-action="kick" type="button" title="Disconnect them from the table" hidden>Kick</button>

@@ -174,8 +174,8 @@ tavern.on('status', () => broadcastStatus());
 tavern.on('connected', () => syncTavern().catch(() => {}));
 tavern.on('party', () => syncTavern().catch(() => {}));
 
-function tavernSourceName(user) {
-  return `Tavern - ${user.displayName}`;
+function tavernSourceName(user, kind = 'main') {
+  return kind === 'status' ? `Tavern - ${user.displayName} (talking)` : `Tavern - ${user.displayName}`;
 }
 
 // Effective view options for a player: per-player overrides over the defaults.
@@ -185,9 +185,17 @@ function tavernPlayerOptions(entry) {
     mode: entry.mode || t.mode,
     audio: entry.audio === null || entry.audio === undefined ? t.audio : entry.audio,
     plate: entry.plate === null || entry.plate === undefined ? t.plate : entry.plate,
+    border: t.border,
     width: t.width,
     height: t.height,
   };
+}
+
+// The talking indicator: a second, smaller source per player showing only the
+// talking and muted images, for overlaying a character bar.
+function tavernStatusOptions() {
+  const t = configStore.get().tavern;
+  return { mode: 'status', audio: false, plate: false, border: false, width: t.statusWidth, height: t.statusHeight };
 }
 
 // Make OBS match the published players: one Browser Source each, named after
@@ -213,15 +221,14 @@ async function syncTavern() {
   report.inputs = inputs.map((i) => i.name);
   const players = { ...t.players };
   let changedConfig = false;
-  for (const [key, entry] of entries) {
-    const user = tavern.party.find((u) => u.key === key);
-    if (!user) continue; // deleted on the server; the card shows it
-    const options = tavernPlayerOptions(entry);
-    const wanted = { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: options.audio };
-    let name = entry.source;
-    const preferred = tavernSourceName(user);
-    // Follow a rename on the server, unless the new name is taken by something else.
-    if (name !== preferred && !inputs.some((i) => i.name === preferred) && !Object.values(players).some((p) => p.source === preferred)) {
+  const ourNames = () => new Set(Object.values(players).flatMap((p) => [p.source, p.statusSource].filter(Boolean)));
+  // One OBS Browser Source: create it, re-point it, follow a rename.
+  const ensure = async (key, field, kind, user, wanted) => {
+    const entry = players[key];
+    let name = entry[field];
+    if (!name) return;
+    const preferred = tavernSourceName(user, kind);
+    if (name !== preferred && !inputs.some((i) => i.name === preferred) && !ourNames().has(preferred)) {
       if (inputs.some((i) => i.name === name)) {
         await obs.renameInput(name, preferred);
         report.renamed.push(`${name} -> ${preferred}`);
@@ -229,7 +236,7 @@ async function syncTavern() {
       const input = inputs.find((i) => i.name === name);
       if (input) input.name = preferred;
       name = preferred;
-      players[key] = { ...entry, source: name };
+      players[key] = { ...entry, [field]: name };
       changedConfig = true;
     }
     const existing = inputs.find((i) => i.name === name);
@@ -242,6 +249,18 @@ async function syncTavern() {
       Object.assign(existing, wanted, { rerouteAudio: wanted.audio });
       report.updated.push(name);
     }
+  };
+  for (const [key, entry] of entries) {
+    const user = tavern.party.find((u) => u.key === key);
+    if (!user) continue; // deleted on the server; the card shows it
+    if (entry.source) {
+      const options = tavernPlayerOptions(entry);
+      await ensure(key, 'source', 'main', user, { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: options.audio });
+    }
+    if (entry.statusSource) {
+      const options = tavernStatusOptions();
+      await ensure(key, 'statusSource', 'status', user, { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: false });
+    }
   }
   if (changedConfig) {
     const current = configStore.get();
@@ -253,23 +272,28 @@ async function syncTavern() {
   return report;
 }
 
+// A fresh source name: never take over a Browser Source that is not ours.
+function freeSourceName(user, kind, players) {
+  const ours = new Set(Object.values(players).flatMap((p) => [p.source, p.statusSource].filter(Boolean)));
+  const taken = new Set(tavernSync.inputs.filter((n) => !ours.has(n)));
+  const base = tavernSourceName(user, kind);
+  let name = base;
+  let n = 2;
+  while (taken.has(name)) name = `${base} ${n++}`;
+  return name;
+}
+
 async function publishPlayer(key, overrides = {}) {
   const user = tavern.party.find((u) => u.key === key);
   if (!user) throw new Error('That player is not on the Tavern any more.');
   const current = configStore.get();
   const players = { ...current.tavern.players };
-  const entry = players[key] || { source: '' };
-  if (!entry.source) {
-    // A fresh name: never take over a Browser Source that is not ours.
-    const ours = new Set(Object.values(players).map((p) => p.source));
-    const taken = new Set(tavernSync.inputs.filter((n) => !ours.has(n)));
-    let name = tavernSourceName(user);
-    let n = 2;
-    while (taken.has(name)) name = `${tavernSourceName(user)} ${n++}`;
-    entry.source = name;
-  }
+  const entry = players[key] || { source: '', statusSource: '' };
+  if (!entry.source) entry.source = freeSourceName(user, 'main', players);
+  if (!entry.statusSource && current.tavern.indicator && overrides.indicator !== false) entry.statusSource = freeSourceName(user, 'status', players);
   players[key] = {
     source: entry.source,
+    statusSource: entry.statusSource || '',
     mode: overrides.mode !== undefined ? overrides.mode : entry.mode || '',
     audio: overrides.audio !== undefined ? overrides.audio : entry.audio ?? null,
     plate: overrides.plate !== undefined ? overrides.plate : entry.plate ?? null,
@@ -279,6 +303,31 @@ async function publishPlayer(key, overrides = {}) {
   return players[key];
 }
 
+// Turn the talking indicator source on or off for one player.
+async function setIndicator(key, on) {
+  const user = tavern.party.find((u) => u.key === key);
+  if (!user) throw new Error('That player is not on the Tavern any more.');
+  const current = configStore.get();
+  const players = { ...current.tavern.players };
+  const entry = { source: '', statusSource: '', mode: '', audio: null, plate: null, ...(players[key] || {}) };
+  if (on && !entry.statusSource) entry.statusSource = freeSourceName(user, 'status', players);
+  if (!on && entry.statusSource) {
+    await removeObsInput(entry.statusSource);
+    entry.statusSource = '';
+  }
+  if (entry.source || entry.statusSource) players[key] = entry;
+  else delete players[key];
+  configStore.save({ ...current, tavern: { ...current.tavern, players } });
+  await syncTavern();
+  return players[key] || null;
+}
+
+async function removeObsInput(name) {
+  if (!name || !obs.connected) return;
+  const inputs = await obs.browserInputs().catch(() => []);
+  if (inputs.some((i) => i.name === name)) await obs.removeInput(name);
+}
+
 async function unpublishPlayer(key, removeFromObs = true) {
   const current = configStore.get();
   const players = { ...current.tavern.players };
@@ -286,9 +335,9 @@ async function unpublishPlayer(key, removeFromObs = true) {
   if (!entry) return;
   delete players[key];
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
-  if (removeFromObs && obs.connected) {
-    const inputs = await obs.browserInputs().catch(() => []);
-    if (inputs.some((i) => i.name === entry.source)) await obs.removeInput(entry.source);
+  if (removeFromObs) {
+    await removeObsInput(entry.source);
+    await removeObsInput(entry.statusSource);
   }
   await syncTavern();
 }
@@ -1342,6 +1391,7 @@ function registerIpc() {
     for (const key of Object.keys(configStore.get().tavern.players)) await unpublishPlayer(key, removeFromObs !== false);
     return fullStatus().tavern;
   });
+  ipcMain.handle('tavern:indicator', (_event, key, on) => setIndicator(String(key), Boolean(on)));
   ipcMain.handle('tavern:viewUrl', (_event, key) => {
     const user = tavern.party.find((u) => u.key === key);
     if (!user) throw new Error('Unknown player.');

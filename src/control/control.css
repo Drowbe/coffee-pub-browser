@@ -858,3 +858,8 @@ select:focus {
   color: var(--text-dim);
   font-size: 12px;
 }
+
+.btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}

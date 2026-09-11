@@ -166,11 +166,12 @@ class TavernBridge extends EventEmitter {
   }
 
   // OBS view link for a player.
-  viewUrl(user, { mode = 'auto', audio = false, plate = false } = {}) {
+  viewUrl(user, { mode = 'auto', audio = false, plate = false, border = false } = {}) {
     const base = `${this.getSettings().url}/view/${encodeURIComponent(user.key)}`;
     const q = new URLSearchParams({ s: this.streamKey, mode });
     if (audio) q.set('audio', '1');
     if (plate) q.set('plate', '1');
+    if (border && mode !== 'status') q.set('border', '1');
     return `${base}?${q}`;
   }
 

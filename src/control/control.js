@@ -769,9 +769,14 @@ const tavernEls = {
   auto: $('tavern-auto'),
   width: $('tavern-width'),
   height: $('tavern-height'),
+  lock: $('tavern-lock'),
   mode: $('tavern-mode'),
   audio: $('tavern-audio'),
   plate: $('tavern-plate'),
+  border: $('tavern-border'),
+  indicator: $('tavern-indicator'),
+  statusWidth: $('tavern-status-width'),
+  statusHeight: $('tavern-status-height'),
   connect: $('tavern-connect'),
   tag: $('tavern-tag'),
   dot: $('tavern-dot'),
@@ -792,10 +797,24 @@ function applyTavernConfig() {
   tavernEls.auto.checked = t.autoConnect;
   if (document.activeElement !== tavernEls.width) tavernEls.width.value = String(t.width);
   if (document.activeElement !== tavernEls.height) tavernEls.height.value = String(t.height);
+  tavernEls.lock.checked = t.lockRatio;
   tavernEls.mode.value = t.mode;
   tavernEls.audio.checked = t.audio;
   tavernEls.plate.checked = t.plate;
+  tavernEls.border.checked = t.border;
+  tavernEls.indicator.checked = t.indicator;
+  if (document.activeElement !== tavernEls.statusWidth) tavernEls.statusWidth.value = String(t.statusWidth);
+  if (document.activeElement !== tavernEls.statusHeight) tavernEls.statusHeight.value = String(t.statusHeight);
 }
+
+// Constrain proportions: the camera is 16:9, so one side follows the other.
+const RATIO_16_9 = 16 / 9;
+tavernEls.width.addEventListener('input', () => {
+  if (tavernEls.lock.checked && Number(tavernEls.width.value) > 0) tavernEls.height.value = String(Math.round(Number(tavernEls.width.value) / RATIO_16_9));
+});
+tavernEls.height.addEventListener('input', () => {
+  if (tavernEls.lock.checked && Number(tavernEls.height.value) > 0) tavernEls.width.value = String(Math.round(Number(tavernEls.height.value) * RATIO_16_9));
+});
 
 async function saveTavernSettings() {
   await flushSave();
@@ -805,10 +824,16 @@ async function saveTavernSettings() {
     autoConnect: tavernEls.auto.checked,
     width: Number(tavernEls.width.value) || 640,
     height: Number(tavernEls.height.value) || 360,
+    lockRatio: tavernEls.lock.checked,
     mode: tavernEls.mode.value,
     audio: tavernEls.audio.checked,
     plate: tavernEls.plate.checked,
+    border: tavernEls.border.checked,
+    indicator: tavernEls.indicator.checked,
+    statusWidth: Number(tavernEls.statusWidth.value) || 256,
+    statusHeight: Number(tavernEls.statusHeight.value) || 256,
   };
+  if (next.lockRatio) next.height = Math.round(next.width / RATIO_16_9);
   config.tavern = { ...config.tavern, ...next };
   try {
     status.tavern = await api.tavernSetSettings(next);
@@ -817,7 +842,7 @@ async function saveTavernSettings() {
   }
   renderTavern();
 }
-for (const el of [tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.mode, tavernEls.audio, tavernEls.plate]) {
+for (const el of [tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.lock, tavernEls.mode, tavernEls.audio, tavernEls.plate, tavernEls.border, tavernEls.indicator, tavernEls.statusWidth, tavernEls.statusHeight]) {
   el.addEventListener('change', saveTavernSettings);
 }
 $('tavern-save-password').addEventListener('click', async () => {
@@ -886,13 +911,13 @@ function renderTavern() {
   const published = (config && config.tavern.players) || {};
   const inputs = new Set((t.sync && t.sync.inputs) || []);
   const obsConnected = status.obs && status.obs.state === 'connected';
-  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'The party';
+  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Users';
   tavernEls.empty.hidden = connected;
   tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see the party here.';
   const online = party.filter((u) => u.online).length;
-  const inObs = party.filter((u) => published[u.key]).length;
+  const inObs = party.filter((u) => published[u.key] && published[u.key].source).length;
   tavernEls.summary.textContent = connected ? `${online} of ${party.length} at the table, ${inObs} in OBS` : '';
-  $('tavern-publish-all').disabled = !connected || party.every((u) => published[u.key]);
+  $('tavern-publish-all').disabled = !connected || party.every((u) => published[u.key] && published[u.key].source);
   $('tavern-unpublish-all').disabled = !Object.keys(published).length;
   $('tavern-sync').disabled = !connected;
 
@@ -912,29 +937,36 @@ function renderTavern() {
     card.querySelector('[data-role="live"]').textContent = user.online
       ? `${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
       : 'offline';
-    card.querySelector('[data-role="published"]').hidden = !entry;
+    const hasMain = Boolean(entry && entry.source);
+    const hasStatus = Boolean(entry && entry.statusSource);
+    card.querySelector('[data-role="published"]').hidden = !hasMain && !hasStatus;
     const chips = card.querySelector('[data-role="chips"]');
     chips.textContent = '';
-    if (entry) {
-      const missing = obsConnected && !inputs.has(entry.source);
-      chips.appendChild(makeChip(entry.source, { missing, title: missing ? 'Not in OBS yet; Sync OBS creates it' : 'The OBS Browser Source for this player' }));
-    } else {
+    for (const [name, what] of [[hasMain && entry.source, 'The OBS Browser Source for this player'], [hasStatus && entry.statusSource, 'The talking indicator source, transparent until they talk or mute']]) {
+      if (!name) continue;
+      const missing = obsConnected && !inputs.has(name);
+      chips.appendChild(makeChip(name, { missing, title: missing ? 'Not in OBS yet; Sync OBS creates it' : what }));
+    }
+    if (!hasMain && !hasStatus) {
       const hint = document.createElement('span');
       hint.className = 'hint';
       hint.textContent = 'Not in OBS';
       chips.appendChild(hint);
     }
     const options = card.querySelector('[data-role="options"]');
-    options.hidden = !entry;
-    if (entry && !isEditing(options)) {
+    options.hidden = !hasMain;
+    if (hasMain && !isEditing(options)) {
       card.querySelector('[data-pfield="mode"]').value = entry.mode || '';
       card.querySelector('[data-pfield="audio"]').value = entry.audio === null ? '' : entry.audio ? 'on' : 'off';
       card.querySelector('[data-pfield="plate"]').value = entry.plate === null ? '' : entry.plate ? 'on' : 'off';
     }
     const publish = card.querySelector('[data-action="publish"]');
-    publish.textContent = entry ? 'Unpublish' : 'Publish';
-    publish.classList.toggle('btn-primary', !entry);
-    publish.title = entry ? 'Remove this player\'s source from OBS' : 'Add a Browser Source for this player to the current OBS scene';
+    publish.textContent = hasMain ? 'Unpublish' : 'Publish';
+    publish.classList.toggle('btn-primary', !hasMain);
+    publish.title = hasMain ? 'Remove this player\'s sources from OBS' : 'Add a Browser Source for this player to the current OBS scene';
+    const indicator = card.querySelector('[data-action="indicator"]');
+    indicator.textContent = hasStatus ? 'Remove indicator' : 'Indicator';
+    indicator.classList.toggle('on', hasStatus);
     card.querySelector('[data-action="mute"]').hidden = !(user.online && user.online.micOn);
     card.querySelector('[data-action="kick"]').hidden = !user.online;
   }
@@ -966,8 +998,10 @@ async function onPlayerClick(event) {
   const published = config.tavern.players[key];
   try {
     if (button.dataset.action === 'publish') {
-      if (published) await api.tavernUnpublish(key, true);
+      if (published && published.source) await api.tavernUnpublish(key, true);
       else await api.tavernPublish(key, {});
+    } else if (button.dataset.action === 'indicator') {
+      await api.tavernIndicator(key, !(published && published.statusSource));
     } else if (button.dataset.action === 'copy-link') {
       const url = await api.tavernViewUrl(key);
       await navigator.clipboard.writeText(url);
@@ -988,7 +1022,7 @@ async function onPlayerOption(event) {
   if (!select) return;
   const card = event.currentTarget;
   const key = card.dataset.key;
-  if (!config.tavern.players[key]) return;
+  if (!config.tavern.players[key] || !config.tavern.players[key].source) return;
   const tri = (v) => (v === '' ? null : v === 'on');
   const overrides = {
     mode: card.querySelector('[data-pfield="mode"]').value,
