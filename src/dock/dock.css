@@ -62,8 +62,10 @@ body.side-left .pill {
 }
 
 .cup {
-  font-size: 18px;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: block;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
 
