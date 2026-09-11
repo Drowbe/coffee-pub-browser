@@ -93,7 +93,7 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Studio.app"
    **Start on launch** box is ticked. The panel has a **Session** tab (layout, the edge dock,
    OBS and login), a **Tavern** tab when Coffee Pub Tavern is enabled, one tab per window with
    its whole-window source and its regions, and a **+** tab that adds a window (up to five).
-   Each window tab has a **Remove window** button.
+   Each window tab has a **Delete window** button.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
    dedicated observer user works well). Windows in the same **Session group** share that
    login; give a window a different group name to give it its own cookies, for a different
@@ -135,9 +135,9 @@ them cropped and pointed at the windows. By hand:
 1. In OBS, click **+** under Sources and choose **macOS Screen Capture**.
 2. Set **Method** to **Window Capture** and pick **Coffee Pub Studio - Game** from the
    **Window** list. Turn off **Show Cursor** if you do not want the pointer recorded.
-3. Crop the top of the source by the amount shown on the window's tab under **Window bar**
-   (28 px, or 56 px on a Retina display) so the app's bar is not recorded: right-click the
-   source, Transform, Edit Transform, and set the top crop.
+3. Crop the top of the source by the height of the app's bar (28 px, or 56 px on a Retina
+   display) so the bar is not recorded: right-click the source, Transform, Edit Transform, and
+   set the top crop. Sources the app creates get this crop by themselves.
 4. Repeat for **Coffee Pub Studio - Stream**.
 5. The first time, macOS asks to give OBS **Screen Recording** permission
    (System Settings > Privacy & Security > Screen Recording). Restart OBS after granting it.
@@ -184,7 +184,7 @@ and a status panel pinned inside the Stream view, define a **region** for each.
 
 1. With the window started, click **Add region** on its tab. A region card appears with a
    name, an enabled checkbox, and its settings. Changes save as you type.
-2. Click **Pick on snapshot** and drag a rectangle on the snapshot of the page, or type X, Y,
+2. Click **Draw the region** and drag a rectangle on the snapshot of the page, or type X, Y,
    Width and Height in page points.
 3. For an element your own module renders, pick **CSS selector** instead, enter the selector
    (for example `#scoreboard`, or a plain list of class names) and click **Measure**. The app
@@ -240,9 +240,15 @@ server. The app signs in to it as an admin and gives every player their own OBS 
 **Unpublish** removes a user's sources from OBS and keeps their ticks. **Sync OBS** makes OBS
 match the published users again: it creates any source that is missing, re-points every
 source at its link and size, and follows renames; the app also does this whenever OBS
-connects or the Tavern reports a change. **Copy link** puts the Player view link
-on the clipboard for a source you manage yourself. **Mute** and **Kick** act on a player at the table.
-**Manage party** opens the Tavern's manage page in your browser for passwords, links and images.
+connects or the Tavern reports a change. The link button on a card puts the Player view link
+on the clipboard for a source you manage yourself. Muting and kicking players is done on the
+Tavern's manage page, which **Manage party** opens in your browser, along with passwords,
+links, images and rooms.
+
+The **Room** card at the top of the Tavern tab picks which room's users are listed: the
+**Lobby** holds everyone, and the rooms an admin curates on the Tavern's Rooms tab hold the
+users they picked. **Publish all** publishes the chosen room's users. For now a room is a
+group for the stream; it does not change who hears whom at the table.
 
 The password is stored encrypted with the macOS keychain, like the OBS password. The stream key
 the sources use is fetched from the server at sign-in and never has to be copied.
@@ -330,15 +336,17 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; `room`, the Tavern room whose users the Tavern tab lists (`lobby` by default); and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
 | `x`, `y` | Window position, written by the app when you move the window; `null` lets macOS place it. |
-| `windowSource` | The whole window as one OBS source: `enabled` (off hides it in OBS and stops maintenance) and `name`, the OBS source name. Replaces the `obsSources` list of older configs; the first linked name carries over. |
+| `windowSource` | The whole window as one OBS source: `enabled` (off hides it in OBS and stops maintenance) and `name`, the OBS source name. |
 | `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains; `enabled` false hides it in OBS and stops maintenance. |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (**Start on launch**). |
+| `dockOnLaunch` | Slide the window into the dock as soon as its page has loaded at launch (**Dock on launch**). |
+| `wakeAudio` | Send the page a key press after it loads so Foundry can start its audio (**Wake audio after load**, on by default). Browsers keep a page silent until someone interacts with it; if a page still stays quiet, click into it once. |
 | `session` | Session group name (default `Main`). Windows with the same name share cookies and storage. |
 
 ## Releasing a new version

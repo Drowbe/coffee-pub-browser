@@ -681,6 +681,22 @@ function createViewWindow(view) {
     return { action: 'deny' };
   });
   wc.on('did-finish-load', broadcastStatus);
+  // Browsers keep a page silent until the user interacts with it, and
+  // Foundry waits for that first gesture before starting its audio. A key
+  // press sent through the input pipeline counts as one.
+  wc.on('did-finish-load', () => {
+    const current = configStore.getView(view.id);
+    if (!current || !current.wakeAudio) return;
+    setTimeout(() => {
+      if (wc.isDestroyed() || !isAlive(win)) return;
+      try {
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Shift' });
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'Shift' });
+      } catch (err) {
+        console.warn(`[${view.id}] wake audio: ${err.message}`);
+      }
+    }, 1500);
+  });
   wc.on('did-start-loading', broadcastStatus);
   wc.on('did-stop-loading', broadcastStatus);
   wc.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
@@ -1070,11 +1086,23 @@ function openAllViews() {
     .forEach((v) => createViewWindow(v));
 }
 
+// Start every window ticked Start on launch; those ticked Dock on launch
+// slide into the dock once their page has loaded.
 function openLaunchViews() {
-  configStore
-    .get()
-    .views.filter((v) => v.enabled && v.url)
-    .forEach((v) => createViewWindow(v));
+  for (const v of configStore.get().views.filter((v) => v.enabled && v.url)) {
+    createViewWindow(v);
+    if (!v.dockOnLaunch) continue;
+    const wc = pageOf(v.id);
+    if (!wc) continue;
+    let done = false;
+    const dock = () => {
+      if (done) return;
+      done = true;
+      parkView(v.id).catch(() => {});
+    };
+    wc.once('did-finish-load', () => setTimeout(dock, 1500)); // a moment for the page to paint its thumbnail
+    setTimeout(dock, 20000); // a page that never finishes loading still docks
+  }
 }
 
 function closeAllViews() {
@@ -1458,7 +1486,7 @@ function registerIpc() {
   ipcMain.handle('tavern:publish', (_event, key) => publishPlayer(String(key)));
   ipcMain.handle('tavern:unpublish', (_event, key, removeFromObs) => unpublishPlayer(String(key), removeFromObs !== false));
   ipcMain.handle('tavern:publishAll', async () => {
-    for (const user of tavern.party) {
+    for (const user of tavern.membersOf(configStore.get().tavern.room)) {
       const entry = playerEntry(configStore.get().tavern, user.key);
       if (!isPublished(entry) && (entry.player || entry.character)) await publishPlayer(user.key);
     }
@@ -1474,8 +1502,6 @@ function registerIpc() {
     if (!user) throw new Error('Unknown user.');
     return kind === 'character' ? tavernCharacterSource(user).url : tavernPlayerSource(user).url;
   });
-  ipcMain.handle('tavern:kick', (_event, key) => tavern.kick(String(key)));
-  ipcMain.handle('tavern:mute', (_event, key) => tavern.mute(String(key)));
   ipcMain.handle('tavern:openManage', () => {
     const { url } = configStore.get().tavern;
     if (url) shell.openExternal(`${url}/admin`);

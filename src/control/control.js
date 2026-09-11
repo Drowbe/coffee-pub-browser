@@ -33,7 +33,7 @@ let saveTimer = null;
 let activeTab = 'session';
 
 const NUMBER_FIELDS = new Set(['width', 'height']);
-const BOOL_FIELDS = new Set(['enabled', 'muted']);
+const BOOL_FIELDS = new Set(['enabled', 'dockOnLaunch', 'muted', 'wakeAudio']);
 
 function setSaveState(text, cls = '') {
   saveStateEl.textContent = text;
@@ -305,9 +305,6 @@ function renderStatus() {
     const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
     const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
     card.querySelector('[data-status="title"]').textContent = `Coffee Pub Studio - ${view.label}  ·  page ${size}${captured}`;
-    card.querySelector('[data-status="crop"]').textContent = s.open
-      ? `The window has a ${s.barHeight} pt bar above the page. Linked OBS sources get a crop of ${s.cropTop} px at the top automatically; for a source you manage yourself, crop the top by ${s.cropTop} px in OBS.`
-      : 'Each window has a bar above the page that the app crops out of linked OBS sources.';
 
     renderWindowSource(card, view, s, o, connected);
     renderRegions(card, view, s, o, connected);
@@ -623,7 +620,7 @@ async function onCardClick(event) {
         }
         break;
       case 'remove-view':
-        if (window.confirm(`Remove the "${view.label}" window and its settings?`)) {
+        if (window.confirm(`Delete the "${view.label}" window and its settings?`)) {
           activeTab = 'session';
           await api.removeView(id);
         }
@@ -904,6 +901,16 @@ $('tavern-unpublish-all').addEventListener('click', () => {
   api.tavernUnpublishAll(true).catch(reportError);
 });
 $('tavern-sync').addEventListener('click', () => api.tavernSync().catch(reportError));
+$('tavern-room').addEventListener('change', async () => {
+  const room = $('tavern-room').value;
+  config.tavern.room = room;
+  try {
+    status.tavern = await api.tavernSetSettings({ room });
+  } catch (err) {
+    reportError(err);
+  }
+  renderTavern();
+});
 
 function playerCardFor(user) {
   let card = playerCards.get(user.key);
@@ -939,12 +946,42 @@ function renderTavern() {
   tavernEls.status.textContent = text;
   tavernEls.status.classList.toggle('hint-error', t.state === 'error');
 
-  // The party tab
-  const party = connected ? t.party : [];
+  // The room chooser: the Lobby and the rooms curated on the Tavern; the
+  // users below are the chosen room's members.
+  const rooms = connected ? t.rooms || [] : [];
+  const chosenId = (config && config.tavern.room) || 'lobby';
+  const room = rooms.find((r) => r.id === chosenId) || rooms.find((r) => r.isLobby) || rooms[0] || null;
+  const select = $('tavern-room');
+  if (!isEditing(select)) {
+    select.textContent = '';
+    for (const r of rooms) {
+      const option = document.createElement('option');
+      option.value = r.id;
+      option.textContent = r.isLobby ? `${r.name} (everyone)` : r.name;
+      select.appendChild(option);
+    }
+    if (room) select.value = room.id;
+  }
+  select.disabled = !connected || rooms.length < 2;
+  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Room';
+  $('tavern-room-name').textContent = room ? room.name : 'Lobby';
+  $('tavern-room-desc').textContent = room ? room.description : '';
+  const roomImage = $('tavern-room-image');
+  const roomImageUrl = room && room.hasImage ? `${t.url}/img/room/${encodeURIComponent(room.id)}?s=${encodeURIComponent(t.streamKey)}` : '';
+  roomImage.hidden = !roomImageUrl;
+  if (roomImageUrl && roomImage.dataset.src !== roomImageUrl) {
+    roomImage.dataset.src = roomImageUrl;
+    roomImage.src = roomImageUrl;
+  }
+  $('tavern-room-card').hidden = !connected;
+
+  // The users of that room
+  const party = connected && room ? t.party.filter((u) => room.members.includes(u.key)) : connected ? t.party : [];
   const published = (config && config.tavern.players) || {};
   const inputs = new Set((t.sync && t.sync.inputs) || []);
   const obsConnected = status.obs && status.obs.state === 'connected';
-  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Users';
+  $('tavern-users-title').textContent = room ? `Users in ${room.name}` : 'Users';
+  $('tavern-room-count').textContent = room ? `${room.members.length} member${room.members.length === 1 ? '' : 's'}` : '';
   tavernEls.empty.hidden = connected;
   tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see the party here.';
   // What each user gets: the ticks, defaulting to Player on and Character
@@ -1005,8 +1042,6 @@ function renderTavern() {
       card.querySelector('[data-choice="player"]').checked = entry.player;
       card.querySelector('[data-choice="character"]').checked = entry.character;
     }
-    card.querySelector('[data-action="mute"]').hidden = !(user.online && user.online.micOn);
-    card.querySelector('[data-action="kick"]').hidden = !user.online;
   }
   for (const [key, card] of playerCards) {
     if (!party.some((u) => u.key === key)) {
@@ -1042,11 +1077,6 @@ async function onPlayerClick(event) {
       const url = await api.tavernViewUrl(key, 'player');
       await navigator.clipboard.writeText(url);
       setSaveState('View link copied');
-    } else if (button.dataset.action === 'mute') {
-      await api.tavernMute(key);
-    } else if (button.dataset.action === 'kick') {
-      if (!window.confirm('Kick this player from the table? They can rejoin.')) return;
-      await api.tavernKick(key);
     }
   } catch (err) {
     reportError(err);
@@ -1148,7 +1178,7 @@ async function openPicker(viewId, region) {
   const view = config.views.find((v) => v.id === viewId);
   picker.viewId = viewId;
   picker.region = region;
-  picker.title.textContent = `Pick "${region.name}" on ${view.label}`;
+  picker.title.textContent = `Draw "${region.name}" on ${view.label}`;
   picker.nameEl.textContent =
     region.mode === 'selector'
       ? 'This region follows a CSS selector; the rectangle you pick here is replaced on the next sync unless you switch it to Rectangle.'

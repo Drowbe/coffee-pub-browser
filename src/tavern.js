@@ -27,6 +27,7 @@ class TavernBridge extends EventEmitter {
     this.me = null;
     this.branding = null;
     this.party = []; // users with live state, as /api/status reports them
+    this.rooms = []; // the Lobby and the rooms an admin curated
     this.pollTimer = null;
     this.reconnectTimer = null;
     this.connecting = null;
@@ -43,6 +44,7 @@ class TavernBridge extends EventEmitter {
       version: this.branding?.version || '',
       streamKey: this.streamKey,
       party: this.party,
+      rooms: this.rooms,
       lastPoll: this.lastPoll,
     };
   }
@@ -76,6 +78,7 @@ class TavernBridge extends EventEmitter {
     this.token = '';
     this.streamKey = '';
     this.party = [];
+    this.rooms = [];
     this.setState('disconnected', 'Disconnected.');
   }
 
@@ -162,8 +165,13 @@ class TavernBridge extends EventEmitter {
     }));
     this.branding = { serverName: status.serverName, tableName: status.tableName, version: status.version };
     this.lastPoll = Date.now();
-    const changed = JSON.stringify(next) !== JSON.stringify(this.party);
+    // Servers before rooms existed report none: everyone is in the Lobby.
+    const rooms = Array.isArray(status.rooms) && status.rooms.length
+      ? status.rooms
+      : [{ id: 'lobby', name: 'Lobby', description: 'Everyone at the table.', members: next.map((u) => u.key), isLobby: true, hasImage: false }];
+    const changed = JSON.stringify(next) !== JSON.stringify(this.party) || JSON.stringify(rooms) !== JSON.stringify(this.rooms);
     this.party = next;
+    this.rooms = rooms;
     if (changed) {
       this.emit('party', this.party);
       this.emit('status', this.status());
@@ -183,12 +191,16 @@ class TavernBridge extends EventEmitter {
     return `${this.getSettings().url}/img/${encodeURIComponent(user.key)}/${slot}?s=${encodeURIComponent(this.streamKey)}`;
   }
 
-  async kick(key) {
-    await this.request('POST', `/api/users/${encodeURIComponent(key)}/kick`);
+  // The room the Tavern tab shows, falling back to the Lobby when the chosen
+  // one is gone, and the users who belong to it.
+  room(id) {
+    return this.rooms.find((r) => r.id === id) || this.rooms.find((r) => r.isLobby) || this.rooms[0] || null;
   }
 
-  async mute(key) {
-    await this.request('POST', `/api/users/${encodeURIComponent(key)}/mute`, { muted: true });
+  membersOf(id) {
+    const room = this.room(id);
+    if (!room) return this.party;
+    return this.party.filter((u) => room.members.includes(u.key));
   }
 
   async request(method, pathname, body, { anonymous = false } = {}) {

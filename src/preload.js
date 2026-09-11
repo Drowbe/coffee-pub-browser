@@ -52,8 +52,6 @@ contextBridge.exposeInMainWorld('coffeePub', {
   tavernUnpublishAll: (removeFromObs) => ipcRenderer.invoke('tavern:unpublishAll', removeFromObs),
   tavernSetChoice: (key, field, on) => ipcRenderer.invoke('tavern:setChoice', key, field, on),
   tavernViewUrl: (key, kind) => ipcRenderer.invoke('tavern:viewUrl', key, kind),
-  tavernKick: (key) => ipcRenderer.invoke('tavern:kick', key),
-  tavernMute: (key) => ipcRenderer.invoke('tavern:mute', key),
   tavernOpenManage: () => ipcRenderer.invoke('tavern:openManage'),
   onStatus: (callback) => {
     const listener = (_event, status) => callback(status);

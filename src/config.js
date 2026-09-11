@@ -7,7 +7,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 11;
+// Version 12 reads only the current field names: the old ones (obsSources,
+// openOnLaunch, obs.enabled, the pre-0.1.9 Tavern names) are no longer
+// migrated.
+const CONFIG_VERSION = 12;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -45,19 +48,19 @@ function defaultView(index) {
     y: null,
     muted: seed ? seed.muted : true,
     enabled: true,
+    dockOnLaunch: false,
+    wakeAudio: true,
     session: DEFAULT_GROUP,
     windowSource: { enabled: seed ? seed.wholeWindow : true, name: defaultSourceName(label) },
     regions: [],
   };
 }
 
-// Accept legacy values ("shared", "separate") and free-form group names.
-function sanitizeSession(value, view) {
+// A free-form session group name; empty means the default group.
+function sanitizeSession(value) {
   if (value === undefined || value === null) return DEFAULT_GROUP;
   const text = String(value).trim().slice(0, 40);
-  if (!text || text.toLowerCase() === 'shared') return DEFAULT_GROUP;
-  if (text.toLowerCase() === 'separate') return view.label || view.id;
-  return text;
+  return text || DEFAULT_GROUP;
 }
 
 const REGION_LIMITS = { maxRegions: 12, maxSelector: 300 };
@@ -119,6 +122,7 @@ function defaultTavern() {
     enabled: false, url: '', login: '', autoConnect: true,
     playerWidth: 640, playerHeight: 360, lockRatio: true,
     characterWidth: 256, characterHeight: 256, characterWithPlayer: false,
+    room: 'lobby', // the Tavern room whose members the Tavern tab shows
     players: {},
   };
 }
@@ -132,28 +136,27 @@ function sanitizeTavern(input) {
       if (!/^[a-z0-9]{4,16}$/.test(key) || !value || typeof value !== 'object') continue;
       const entry = {
         source: typeof value.source === 'string' ? value.source.trim().slice(0, 200) : '',
-        // statusSource was the pre-0.1.9 name of the character source
-        characterSource: typeof (value.characterSource ?? value.statusSource) === 'string' ? (value.characterSource ?? value.statusSource).trim().slice(0, 200) : '',
+        characterSource: typeof value.characterSource === 'string' ? value.characterSource.trim().slice(0, 200) : '',
+        // The Player and Character ticks
+        player: value.player === undefined ? true : Boolean(value.player),
+        character: value.character === undefined ? Boolean(value.characterSource) : Boolean(value.character),
       };
-      // The Player and Character ticks; older entries had only the sources.
-      entry.player = value.player === undefined ? true : Boolean(value.player);
-      entry.character = value.character === undefined ? Boolean(entry.characterSource) : Boolean(value.character);
       const touched = value.player !== undefined || value.character !== undefined;
       if (entry.source || entry.characterSource || touched) players[key] = entry;
     }
   }
-  // width/height/statusWidth/statusHeight/indicator were the pre-0.1.9 names
   return {
     enabled: src.enabled === undefined ? d.enabled : Boolean(src.enabled),
     url: sanitizeUrl(src.url).replace(/\/+$/, ''),
     login: typeof src.login === 'string' ? src.login.trim().slice(0, 40) : d.login,
     autoConnect: src.autoConnect === undefined ? d.autoConnect : Boolean(src.autoConnect),
-    playerWidth: clamp(toInt(src.playerWidth ?? src.width, d.playerWidth), 64, 3840),
-    playerHeight: clamp(toInt(src.playerHeight ?? src.height, d.playerHeight), 64, 2160),
+    playerWidth: clamp(toInt(src.playerWidth, d.playerWidth), 64, 3840),
+    playerHeight: clamp(toInt(src.playerHeight, d.playerHeight), 64, 2160),
     lockRatio: src.lockRatio === undefined ? d.lockRatio : Boolean(src.lockRatio),
-    characterWidth: clamp(toInt(src.characterWidth ?? src.statusWidth, d.characterWidth), 32, 3840),
-    characterHeight: clamp(toInt(src.characterHeight ?? src.statusHeight, d.characterHeight), 32, 2160),
-    characterWithPlayer: Boolean(src.characterWithPlayer ?? src.indicator ?? d.characterWithPlayer),
+    characterWidth: clamp(toInt(src.characterWidth, d.characterWidth), 32, 3840),
+    characterHeight: clamp(toInt(src.characterHeight, d.characterHeight), 32, 2160),
+    characterWithPlayer: src.characterWithPlayer === undefined ? d.characterWithPlayer : Boolean(src.characterWithPlayer),
+    room: typeof src.room === 'string' && /^[a-z0-9_-]{1,40}$/i.test(src.room) ? src.room : 'lobby',
     players,
   };
 }
@@ -226,24 +229,19 @@ function sanitizeView(input, index) {
     y,
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
-    session: sanitizeSession(src.session, { label: typeof src.label === 'string' ? src.label.trim() : '', id: fallback.id }),
-    windowSource: sanitizeWindowSource(src, label, fallback),
+    dockOnLaunch: src.dockOnLaunch === undefined ? fallback.dockOnLaunch : Boolean(src.dockOnLaunch),
+    wakeAudio: src.wakeAudio === undefined ? fallback.wakeAudio : Boolean(src.wakeAudio),
+    session: sanitizeSession(src.session),
+    windowSource: sanitizeWindowSource(src.windowSource, label, fallback),
     regions: sanitizeRegions(src.regions),
   };
 }
 
 // The whole window as one OBS source: an on/off switch and the source name.
-// Configs before version 11 kept a list of linked source names in
-// `obsSources`; the first one becomes the name, and the switch is on only
-// when something was linked.
-function sanitizeWindowSource(src, label, fallback) {
-  const legacy = Array.isArray(src.obsSources) ? src.obsSources.filter((n) => typeof n === 'string' && n.trim()) : [];
-  const ws = src.windowSource && typeof src.windowSource === 'object' ? src.windowSource : null;
-  let enabled;
-  if (ws) enabled = ws.enabled === undefined ? true : Boolean(ws.enabled);
-  else if (Array.isArray(src.obsSources)) enabled = legacy.length > 0;
-  else enabled = fallback.windowSource.enabled;
-  const raw = ws && typeof ws.name === 'string' ? ws.name : legacy[0] || '';
+function sanitizeWindowSource(input, label, fallback) {
+  const ws = input && typeof input === 'object' ? input : null;
+  const enabled = ws && ws.enabled !== undefined ? Boolean(ws.enabled) : fallback.windowSource.enabled;
+  const raw = ws && typeof ws.name === 'string' ? ws.name : '';
   const name = raw.trim().slice(0, 200) || defaultSourceName(label);
   return { enabled, name };
 }
@@ -253,8 +251,7 @@ function sanitizeObs(input) {
   const src = input && typeof input === 'object' ? input : {};
   const host = typeof src.host === 'string' && src.host.trim() ? src.host.trim().slice(0, 200) : d.host;
   return {
-    // "enabled" was the pre-0.1.7 name for the same setting.
-    autoConnect: Boolean(src.autoConnect === undefined ? src.enabled : src.autoConnect),
+    autoConnect: Boolean(src.autoConnect),
     host,
     port: clamp(toInt(src.port, d.port), 1, 65535),
   };

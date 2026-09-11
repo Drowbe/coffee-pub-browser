@@ -543,6 +543,7 @@ select:focus {
   position: relative;
   display: inline-block;
   max-width: 100%;
+  overflow: hidden; /* keeps the selection's dimming shadow on the snapshot, off the buttons */
   line-height: 0;
   cursor: crosshair;
   border: 1px solid var(--border);
@@ -811,6 +812,34 @@ select:focus {
   gap: 8px;
 }
 
+/* The chosen Tavern room: its picture and description above the users */
+.room-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.room-image {
+  width: 120px;
+  height: 68px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+.room-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+#tavern-room {
+  min-width: 180px;
+}
+
 .player-card {
   display: flex;
   align-items: center;
@@ -866,6 +895,18 @@ select:focus {
 .btn.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+  color: var(--text-dim);
+}
+
+.btn-icon:hover {
+  color: var(--text);
 }
 
 /* One gap between every card on a tab, matching the gap above the first one. */

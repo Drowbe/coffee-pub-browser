@@ -12,7 +12,7 @@
       <span class="brand-mark">&#9749;</span>
       <div>
         <h1>Coffee Pub Studio</h1>
-        <p class="subtitle">Fixed-size Chromium windows for OBS. Add each one in OBS as a <strong>Window Capture</strong> source.</p>
+        <p class="subtitle">The OBS publishing toolkit.</p>
       </div>
     </div>
     <div class="topbar-actions">
@@ -23,8 +23,8 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="tab" data-tab="session" type="button">Session <span class="dot" id="obs-dot" title="OBS connection"></span></button>
-    <button class="tab" data-tab="tavern" id="tavern-tab" type="button" hidden>Tavern <span class="dot" id="tavern-dot" title="Tavern connection"></span></button>
+    <button class="tab" data-tab="session" type="button"><span class="dot" id="obs-dot" title="OBS connection"></span>Session</button>
+    <button class="tab" data-tab="tavern" id="tavern-tab" type="button" hidden><span class="dot" id="tavern-dot" title="Tavern connection"></span>Tavern</button>
     <span id="view-tabs" class="view-tabs"></span>
     <button class="tab tab-add" data-tab="add" type="button" title="Add a window">+</button>
   </nav>
@@ -195,7 +195,26 @@
       <div class="card">
         <div class="view-head">
           <div class="view-head-left">
-            <h2 id="tavern-title">Users</h2>
+            <h2 id="tavern-title">Room</h2>
+          </div>
+          <div class="view-actions">
+            <select id="tavern-room" title="The room whose users are listed below"></select>
+          </div>
+        </div>
+        <div class="room-card" id="tavern-room-card">
+          <img class="room-image" id="tavern-room-image" alt="" hidden>
+          <div class="room-text">
+            <strong id="tavern-room-name">Lobby</strong>
+            <span class="hint" id="tavern-room-desc"></span>
+            <span class="hint" id="tavern-room-count"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="view-head">
+          <div class="view-head-left">
+            <h2 id="tavern-users-title">Users</h2>
             <span class="hint" id="tavern-summary"></span>
           </div>
           <div class="view-actions">
@@ -261,7 +280,9 @@
 
       <div class="checks">
         <label class="check"><input data-field="enabled" type="checkbox"><span>Start on launch</span></label>
+        <label class="check" title="Slide the window into the dock as soon as it has loaded"><input data-field="dockOnLaunch" type="checkbox"><span>Dock on launch</span></label>
         <label class="check"><input data-field="muted" type="checkbox"><span>Mute audio</span></label>
+        <label class="check" title="Browsers keep a page silent until someone interacts with it. This sends the page a key press after it loads so Foundry can start its audio; if a page still stays quiet, click into it once."><input data-field="wakeAudio" type="checkbox"><span>Wake audio after load</span></label>
       </div>
 
       <div class="details">
@@ -271,13 +292,13 @@
         </div>
         <div class="details-row">
           <span class="details-key">Window bar</span>
-          <span class="details-value hint" data-status="crop">-</span>
+          <span class="details-value hint">Shares only the content, not the title bar.</span>
         </div>
       </div>
 
       <div class="row card-footer">
-        <span class="hint">Removing a window forgets its OBS sources; the sources stay in OBS.</span>
-        <button class="btn btn-danger" data-action="remove-view" type="button">Remove window</button>
+        <span class="hint">Deleting a window forgets its OBS sources; the sources stay in OBS.</span>
+        <button class="btn btn-danger" data-action="remove-view" type="button">Delete window</button>
       </div>
     </article>
 
@@ -325,9 +346,7 @@
         <button class="btn btn-small btn-primary" data-action="publish" type="button">Publish</button>
         <label class="check" title="The Player source: their video, or their player image when the camera is off"><input type="checkbox" data-choice="player"><span>Player</span></label>
         <label class="check" title="The Character source: their character image with the talking and muted images on top"><input type="checkbox" data-choice="character"><span>Character</span></label>
-        <button class="btn btn-small" data-action="copy-link" type="button" title="Copy the Player view link">Copy link</button>
-        <button class="btn btn-small" data-action="mute" type="button" title="Mute their microphone at the table" hidden>Mute</button>
-        <button class="btn btn-small btn-danger" data-action="kick" type="button" title="Disconnect them from the table" hidden>Kick</button>
+        <button class="btn btn-small btn-icon" data-action="copy-link" type="button" title="Copy the Player view link" aria-label="Copy the Player view link"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M10.6 13.4a1 1 0 0 1 0-1.4l3.4-3.4a3 3 0 1 1 4.2 4.2l-1.7 1.7a1 1 0 1 1-1.4-1.4l1.7-1.7a1 1 0 0 0-1.4-1.4L12 13.4a1 1 0 0 1-1.4 0zm2.8-2.8a1 1 0 0 1 0 1.4L10 15.4a3 3 0 1 1-4.2-4.2l1.7-1.7a1 1 0 1 1 1.4 1.4l-1.7 1.7a1 1 0 0 0 1.4 1.4l3.4-3.4a1 1 0 0 1 1.4 0z"/></svg></button>
       </div>
     </article>
   </template>
@@ -349,7 +368,7 @@
           <label class="check"><input type="radio" data-rfield="mode" value="selector"><span>CSS selector</span></label>
         </div>
         <div class="row selector-row" data-role="selector-row">
-          <input data-rfield="selector" type="text" spellcheck="false" placeholder="#scoreboard, [data-item-id=&quot;party-health&quot;], or a list of class names">
+          <input data-rfield="selector" type="text" spellcheck="false" placeholder="#scoreboard, [data-item-id=&quot;party-health&quot;], or a list of class names" title="Any CSS selector, matched against the live page:&#10;  #scoreboard                      an id&#10;  .herald-stats                    a class&#10;  [data-item-id=&quot;party-health&quot;]    an attribute&#10;  herald stats widget              plain class names, space separated (.herald.stats.widget)&#10;  #sidebar .party > .row:first-child   anything a browser understands&#10;The first element that matches is measured.">
           <button class="btn btn-small" data-action="measure-region" type="button">Measure</button>
           <small class="hint" data-role="measure-out"></small>
         </div>
@@ -360,7 +379,7 @@
           <label class="field"><span>Height</span><input data-rfield="height" type="number" min="1" step="1"></label>
         </div>
         <div class="row">
-          <button class="btn btn-small" data-action="pick-region" type="button">Pick on snapshot</button>
+          <button class="btn btn-small" data-action="pick-region" type="button">Draw the region</button>
           <span class="hint" data-role="region-note"></span>
         </div>
       </div>
