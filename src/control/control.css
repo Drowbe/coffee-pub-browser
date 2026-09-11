@@ -863,3 +863,10 @@ select:focus {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* One gap between every card on a tab, matching the gap above the first one. */
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
