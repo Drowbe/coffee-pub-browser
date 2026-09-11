@@ -179,6 +179,9 @@ function defaultConfig() {
     menuBarIcon: true,
     hideDockIcon: false,
     wakeAudioDelay: 30, // seconds after a page loads before its audio is woken
+    // On a Retina display OBS captures twice the pixels; false scales the
+    // app's sources by half in OBS so they land at the configured size.
+    retinaDouble: false,
     arrangeDisplayId: null,
     dock: defaultDock(),
     obs: defaultObs(),
@@ -281,6 +284,7 @@ function sanitizeConfig(input) {
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
     wakeAudioDelay: clamp(toInt(src.wakeAudioDelay, defaults.wakeAudioDelay), 10, 300),
+    retinaDouble: src.retinaDouble === undefined ? defaults.retinaDouble : Boolean(src.retinaDouble),
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
     dock: sanitizeDock(src.dock),
     obs: sanitizeObs(src.obs),

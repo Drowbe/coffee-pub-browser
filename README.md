@@ -257,9 +257,12 @@ the sources use is fetched from the server at sign-in and never has to be copied
 
 On a Retina display macOS renders 2 physical pixels per point, so a 1920 x 1080 window is
 captured by OBS at 3840 x 2160. The control panel shows the exact **Captured pixels** for each
-open window. Either scale the source in OBS (right-click the source > Transform > Edit
-Transform) or configure half-size windows here. On a non-Retina display, or when the app
-windows sit on a non-Retina external monitor, the sizes match 1:1.
+open window. The **Retina display: double the pixel dimensions** tick on the Session tab decides
+what the app does about it. Unticked (the default), Sync OBS scales the window and region
+sources it creates by half, so they land in the scene at the sizes set here. Ticked, it keeps
+the double pixels for a sharper 4K canvas. A scale you set by hand on a source in OBS is left
+alone. On a non-Retina display, or when the app windows sit on a non-Retina external monitor,
+the sizes match 1:1 and the tick makes no difference.
 
 ### Keyboard shortcuts
 
@@ -334,6 +337,7 @@ Settings are stored as JSON at
 | --- | --- |
 | `panel` | Where the control panel was last left (`x`, `y`, `width`, `height`), written by the app; `null` lets macOS place it. |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
+| `retinaDouble` | On a Retina display OBS captures twice the pixels of a window's size. `false` (default): the app scales its window and region sources by half in OBS so they land at the sizes set here. `true`: it keeps the double pixels (**Retina display: double the pixel dimensions**). A scale you set by hand on a source in OBS is left alone. |
 | `wakeAudioDelay` | Seconds after a page loads before its audio is woken (**Wake audio after** on the Session tab, 10 to 300, default 30). Foundry ignores clicks until it has fully loaded, which can take longer than the page says. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |

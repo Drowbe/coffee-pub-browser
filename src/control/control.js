@@ -12,6 +12,7 @@ const wakeDelayEl = $('wake-delay');
 const wakeDelayValueEl = $('wake-delay-value');
 const describeDelay = (s) => (s < 60 ? `${s} s` : s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`);
 const hideDockIconEl = $('hide-dock-icon');
+const retinaDoubleEl = $('retina-double');
 const arrangeDisplayEl = $('arrange-display');
 const retinaHintEl = $('retina-hint');
 const obsHostEl = $('obs-host');
@@ -179,6 +180,7 @@ function applyConfig(next) {
   renderSessionGroups();
   hideDockIconEl.checked = config.hideDockIcon;
   hideDockIconEl.disabled = !config.menuBarIcon;
+  retinaDoubleEl.checked = config.retinaDouble;
   obsAutoEl.checked = config.obs.autoConnect;
   if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
   if (document.activeElement !== obsPortEl) obsPortEl.value = String(config.obs.port);
@@ -233,12 +235,12 @@ function renderDisplays() {
     arrangeDisplayEl.value = previous;
   }
   const hiDpi = status.displays.filter((d) => d.scaleFactor > 1);
-  if (hiDpi.length) {
-    retinaHintEl.textContent =
-      `Retina note: on a ${hiDpi[0].scaleFactor}x display OBS captures ${hiDpi[0].scaleFactor}x the window size in pixels. ` +
-      'Either scale the source in OBS or halve the width/height here.';
+  if (!hiDpi.length) {
+    retinaHintEl.textContent = 'No Retina display: window size and captured pixel size match.';
+  } else if (config && config.retinaDouble) {
+    retinaHintEl.textContent = `Retina: OBS captures ${hiDpi[0].scaleFactor}x the pixels of the sizes here, and the app leaves its sources at that size.`;
   } else {
-    retinaHintEl.textContent = 'Window size and captured pixel size match on this display.';
+    retinaHintEl.textContent = `Retina: OBS captures ${hiDpi[0].scaleFactor}x the pixels of the sizes here, so the app scales its window and region sources by 1/${hiDpi[0].scaleFactor} in OBS to match.`;
   }
 }
 
@@ -709,6 +711,7 @@ async function flushSave() {
   try {
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
+    config.retinaDouble = retinaDoubleEl.checked;
     config.wakeAudioDelay = Number(wakeDelayEl.value);
     config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right', overlap: Number(dockOverlapEl.value) };
     if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
@@ -735,7 +738,7 @@ arrangeDisplayEl.addEventListener('change', () => {
   config.arrangeDisplayId = Number(arrangeDisplayEl.value);
   scheduleSave();
 });
-for (const el of [menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl, wakeDelayEl]) el.addEventListener('change', scheduleSave);
+for (const el of [menuBarIconEl, hideDockIconEl, retinaDoubleEl, dockEnabledEl, dockSideEl, dockOverlapEl, wakeDelayEl]) el.addEventListener('change', scheduleSave);
 wakeDelayEl.addEventListener('input', () => {
   wakeDelayValueEl.textContent = describeDelay(Number(wakeDelayEl.value));
 });
@@ -975,8 +978,8 @@ function renderTavern() {
   // Rebuild the list only when it changed, so a room added on the Tavern
   // shows up even while the chooser has focus.
   const select = $('tavern-room');
-  const wanted = rooms.map((r) => `${r.id} ${r.isLobby ? `${r.name} (everyone)` : r.name}`);
-  const have = [...select.options].map((o) => `${o.value} ${o.textContent}`);
+  const wanted = rooms.map((r) => `${r.id} ${r.isLobby ? `${r.name} (everyone)` : r.name}`);
+  const have = [...select.options].map((o) => `${o.value} ${o.textContent}`);
   if (wanted.join('\n') !== have.join('\n')) {
     select.textContent = '';
     for (const r of rooms) {
@@ -1007,7 +1010,7 @@ function renderTavern() {
   $('tavern-users-title').textContent = room ? `Users in ${room.name}` : 'Users';
   $('tavern-room-count').textContent = room ? `${room.members.length} member${room.members.length === 1 ? '' : 's'}` : '';
   tavernEls.empty.hidden = connected;
-  tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see the party here.';
+  tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see who is at the table.';
   // What each user gets: the ticks, defaulting to Player on and Character
   // per the Session tab; the sources exist while they are published.
   const entryFor = (key) => {

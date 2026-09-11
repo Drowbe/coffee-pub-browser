@@ -266,6 +266,32 @@ class ObsBridge extends EventEmitter {
     return changed;
   }
 
+  // Scale every scene item of a source to `scale` (the Retina correction),
+  // but only items still at 1 or at an old correction, so a transform the
+  // user set by hand in OBS is left alone.
+  async ensureScale(sourceName, scale) {
+    const ours = (v) => [1, 0.5, 1 / 3, scale].some((s) => Math.abs(v - s) < 0.001);
+    const { scenes } = await this.obs.call('GetSceneList');
+    const apply = async (sceneName, items) => {
+      for (const item of items) {
+        if (item.sourceName === sourceName) {
+          const { sceneItemTransform: t } = await this.obs.call('GetSceneItemTransform', { sceneName, sceneItemId: item.sceneItemId });
+          const current = t && typeof t.scaleX === 'number' ? t.scaleX : 1;
+          if (Math.abs(current - scale) < 0.001 || !ours(current)) continue;
+          await this.obs.call('SetSceneItemTransform', { sceneName, sceneItemId: item.sceneItemId, sceneItemTransform: { scaleX: scale, scaleY: scale } });
+        }
+        if (item.isGroup) {
+          const { sceneItems } = await this.obs.call('GetGroupSceneItemList', { sceneName: item.sourceName });
+          await apply(item.sourceName, sceneItems);
+        }
+      }
+    };
+    for (const scene of scenes) {
+      const { sceneItems } = await this.obs.call('GetSceneItemList', { sceneName: scene.sceneName });
+      await apply(scene.sceneName, sceneItems);
+    }
+  }
+
   // --- Browser sources (Coffee Pub Tavern players) --------------------------
 
   // Every Browser Source in OBS with its URL and size.
@@ -385,12 +411,14 @@ class ObsBridge extends EventEmitter {
           if (!known.has(name)) continue;
           await this.ensureCropFilter(name, view.crop);
           report.cropped.push(name);
+          if (view.scale) await this.ensureScale(name, view.scale);
         }
       }
       for (const region of view.regions) {
         if (!region.obsSource || !known.has(region.obsSource) || !region.crop) continue;
         await this.ensureCropFilter(region.obsSource, region.crop);
         report.cropped.push(region.obsSource);
+        if (view.scale && windowId) await this.ensureScale(region.obsSource, view.scale);
       }
     }
     this.lastSync = { at: Date.now(), ...report };

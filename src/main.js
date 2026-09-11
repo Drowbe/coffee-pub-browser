@@ -645,13 +645,18 @@ async function syncObs() {
   const force = new Set(freshlyShown);
   freshlyShown.clear();
   const views = [];
+  const { retinaDouble } = configStore.get();
   for (const view of configStore.get().views) {
     const win = viewWindows.get(view.id);
     const regions = await refreshRegions(view);
+    // On a Retina display the capture has sf times the pixels of the window;
+    // unless the user wants that, the sources are scaled back down in OBS.
+    const sf = isAlive(win) ? scaleFactorOf(win) : 1;
     views.push({
       id: view.id,
       title: windowTitle(view),
       windowId: systemWindowId(win),
+      scale: sf === 1 ? null : retinaDouble ? 1 : 1 / sf,
       sources: windowSources(view),
       allRegionSources: view.regions.map((r) => r.obsSource).filter(Boolean),
       crop: barCrop(win),

@@ -64,9 +64,13 @@
             <input id="menu-bar-icon" type="checkbox">
             <span>Show a menu bar icon with Start, Stop, Park and Sync shortcuts</span>
           </label>
-          <label class="check check-indent">
+          <label class="check">
             <input id="hide-dock-icon" type="checkbox">
             <span>Hide the Dock icon (menu bar only)</span>
+          </label>
+          <label class="check" title="OBS captures a window on a Retina display at twice the pixels of its size here. Unticked, the app scales its window and region sources by half in OBS so they land at the sizes set here. Ticked, it keeps the double pixels.">
+            <input id="retina-double" type="checkbox">
+            <span>Retina display: double the pixel dimensions</span>
           </label>
         </div>
         <div class="row wake-row">
@@ -133,7 +137,7 @@
           </div>
           <div class="view-actions">
             <button id="tavern-connect" class="btn btn-primary" type="button">Sign in</button>
-            <button id="tavern-manage" class="btn" type="button" title="Open the Tavern's manage page in your browser">Manage party</button>
+            <button id="tavern-manage" class="btn" type="button" title="Open the Tavern's manage page in your browser">Manage users</button>
           </div>
         </div>
         <p class="hint">
