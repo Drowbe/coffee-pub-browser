@@ -301,7 +301,7 @@ function renderStatus() {
 
     const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
     const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
-    card.querySelector('[data-status="title"]').textContent = `Coffee Pub Browser - ${view.label}  ·  page ${size}${captured}`;
+    card.querySelector('[data-status="title"]').textContent = `Coffee Pub Studio - ${view.label}  ·  page ${size}${captured}`;
     card.querySelector('[data-status="crop"]').textContent = s.open
       ? `The window has a ${s.barHeight} pt bar above the page. Linked OBS sources get a crop of ${s.cropTop} px at the top automatically; for a source you manage yourself, crop the top by ${s.cropTop} px in OBS.`
       : 'Each window has a bar above the page that the app crops out of linked OBS sources.';
@@ -915,5 +915,5 @@ $('picker-save').addEventListener('click', async () => {
   renderStatus();
   $('app-info').textContent =
     `${info.revision}${info.build && info.build.branch ? ` on ${info.build.branch}` : ''} - Electron ${info.electron} - Chromium ${info.chrome}`;
-  document.title = `Coffee Pub Browser - Control Panel - ${info.revision}`;
+  document.title = `Coffee Pub Studio - Control Panel - ${info.revision}`;
 })().catch((err) => setSaveState(`Failed to start: ${err.message}`, 'error'));

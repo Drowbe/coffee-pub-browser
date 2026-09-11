@@ -1,8 +1,8 @@
 'use strict';
 
-// Persistent configuration for Coffee Pub Browser.
+// Persistent configuration for Coffee Pub Studio.
 // Stored as JSON in Electron's per-user data directory, e.g.
-// ~/Library/Application Support/Coffee Pub Browser/config.json
+// ~/Library/Application Support/Coffee Pub Studio/config.json
 
 const fs = require('fs');
 const path = require('path');

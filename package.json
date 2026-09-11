@@ -1,6 +1,6 @@
 {
-  "name": "coffee-pub-browser",
-  "productName": "Coffee Pub Browser",
+  "name": "coffee-pub-studio",
+  "productName": "Coffee Pub Studio",
   "version": "0.1.8",
   "description": "Wraps the FoundryVTT Game and Stream views in two fixed-size Chromium windows that OBS can capture as sources.",
   "main": "src/main.js",
@@ -26,8 +26,8 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "live.coffeepub.browser",
-    "productName": "Coffee Pub Browser",
+    "appId": "live.coffeepub.studio",
+    "productName": "Coffee Pub Studio",
     "copyright": "Copyright © 2026 Coffee Pub",
     "asar": true,
     "files": [
@@ -59,8 +59,8 @@
         }
       ],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Coffee Pub Browser needs the microphone if you use FoundryVTT audio/video chat inside the Game window.",
-        "NSCameraUsageDescription": "Coffee Pub Browser needs the camera if you use FoundryVTT audio/video chat inside the Game window."
+        "NSMicrophoneUsageDescription": "Coffee Pub Studio needs the microphone if you use FoundryVTT audio/video chat inside the Game window.",
+        "NSCameraUsageDescription": "Coffee Pub Studio needs the camera if you use FoundryVTT audio/video chat inside the Game window."
       }
     },
     "dmg": {

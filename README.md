@@ -1,14 +1,19 @@
-# Coffee Pub Browser
+# Coffee Pub Studio
 
-A standalone macOS app that wraps the FoundryVTT **Game** view and **Stream** view in
-fixed-size Chromium windows so OBS can capture each one as its own source. It is built for
+The production side of the Coffee Pub suite: a standalone macOS app that wraps the FoundryVTT
+**Game** view and **Stream** view in fixed-size Chromium windows so OBS can capture each one as
+its own source, and that keeps those OBS sources cropped, pointed and in sync. It is built for
 recording live Foundry sessions: the Game window shows the canvas, the Stream window shows the
 chat stream. You can run one to five windows; two is the default.
+
+The app was called **Coffee Pub Browser** before v0.1.8. The first launch of Coffee Pub Studio
+copies your settings over from the old app's folder; only the OBS password has to be entered
+again, because it is encrypted with a keychain entry named after the app.
 
 - Borderless windows with a slim bar of the app's own at the top for dragging and resizing,
   and the page at the exact pixel size you configure below it. Linked OBS sources get a crop
   that removes the bar, so OBS sees only the page.
-- Stable window names (`Coffee Pub Browser - Game`, `Coffee Pub Browser - Stream`) so OBS
+- Stable window names (`Coffee Pub Studio - Game`, `Coffee Pub Studio - Stream`) so OBS
   Window Capture always finds them, even though Foundry keeps rewriting the page title.
 - All windows share one login session. Log into Foundry once in the Game window.
 - Rendering is never throttled when a window is behind other windows or unfocused, so the OBS
@@ -41,7 +46,7 @@ release, then follow [First launch](#first-launch-unsigned-build) below.
 
 Every push also runs the **Build macOS app** workflow on a macOS runner. If you need a build
 from a branch that has not been released, open the **Actions** tab, pick the run, and download
-the **Coffee-Pub-Browser-macOS** artifact (a zip containing the `.dmg`).
+the **Coffee-Pub-Studio-macOS** artifact (a zip containing the `.dmg`).
 
 ### Option B: build it yourself
 
@@ -52,10 +57,10 @@ npm run dist
 
 This produces a universal (Apple Silicon + Intel) build in `dist/`:
 
-- `dist/Coffee Pub Browser-1.0.0-universal.dmg`
-- `dist/Coffee Pub Browser-1.0.0-universal-mac.zip`
+- `dist/Coffee Pub Studio-1.0.0-universal.dmg`
+- `dist/Coffee Pub Studio-1.0.0-universal-mac.zip`
 
-Open the `.dmg` and drag **Coffee Pub Browser** into `Applications`.
+Open the `.dmg` and drag **Coffee Pub Studio** into `Applications`.
 
 For a faster, smaller build for just your machine's chip:
 
@@ -77,12 +82,12 @@ right-click the app in `Applications` and choose **Open**, then **Open** again i
 or clear the quarantine flag from a terminal:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/Coffee Pub Browser.app"
+xattr -dr com.apple.quarantine "/Applications/Coffee Pub Studio.app"
 ```
 
 ## Using it
 
-1. Launch **Coffee Pub Browser**. The control panel opens and, by default, the windows open
+1. Launch **Coffee Pub Studio**. The control panel opens and, by default, the windows open
    too. The panel has a **Session** tab (layout, the edge dock, OBS and login), one tab per
    window with its regions, and a **+** tab that adds a window (up to five). Each window tab
    has a **Remove window** button.
@@ -125,12 +130,12 @@ The easy way is the OBS connection described below: the app creates the sources 
 them cropped and pointed at the windows. By hand:
 
 1. In OBS, click **+** under Sources and choose **macOS Screen Capture**.
-2. Set **Method** to **Window Capture** and pick **Coffee Pub Browser - Game** from the
+2. Set **Method** to **Window Capture** and pick **Coffee Pub Studio - Game** from the
    **Window** list. Turn off **Show Cursor** if you do not want the pointer recorded.
 3. Crop the top of the source by the amount shown on the window's tab under **Window bar**
    (28 px, or 56 px on a Retina display) so the app's bar is not recorded: right-click the
    source, Transform, Edit Transform, and set the top crop.
-4. Repeat for **Coffee Pub Browser - Stream**.
+4. Repeat for **Coffee Pub Studio - Stream**.
 5. The first time, macOS asks to give OBS **Screen Recording** permission
    (System Settings > Privacy & Security > Screen Recording). Restart OBS after granting it.
 
@@ -211,7 +216,7 @@ windows sit on a non-Retina external monitor, the sizes match 1:1.
 ## Configuration
 
 Settings are stored as JSON at
-`~/Library/Application Support/Coffee Pub Browser/config.json` (the control panel's
+`~/Library/Application Support/Coffee Pub Studio/config.json` (the control panel's
 **Show config file** button reveals it in Finder).
 
 ```json
@@ -299,14 +304,14 @@ VS Code, creates `~/Developer`, clones every Coffee Pub repository into it and r
 `npm install` for this app. It is safe to re-run; each step skips what is already done.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-browser/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
+curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
 bash ~/mac-dev-setup.sh
 ```
 
 Afterwards, run the app from source with:
 
 ```bash
-cd ~/Developer/coffee-pub-browser
+cd ~/Developer/coffee-pub-studio
 git pull
 npm start
 ```

@@ -5,10 +5,10 @@
 #   1. Homebrew, git, fnm (Node version manager), GitHub Desktop, VS Code
 #   2. Node 22 as the default Node
 #   3. ~/Developer with a clone of every Coffee Pub repository
-#   4. npm install for coffee-pub-browser
+#   4. npm install for coffee-pub-studio
 #
 # Run it with:
-#   curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-browser/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
+#   curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
 #   bash ~/mac-dev-setup.sh
 #
 # Edit the REPOS list or the CASKS list below to taste before running.
@@ -20,7 +20,7 @@ GITHUB_USER="Drowbe"
 NODE_VERSION="22"
 CASKS=(github visual-studio-code)   # GitHub Desktop, VS Code. Remove any you do not want.
 REPOS=(
-  coffee-pub-browser
+  coffee-pub-studio
   coffee-pub-blacksmith
   coffee-pub-merchant
   coffee-pub-regent
@@ -130,16 +130,16 @@ for repo in "${REPOS[@]}"; do
   fi
 done
 
-# --- coffee-pub-browser dependencies ---------------------------------------
-if [[ -f "$DEV_DIR/coffee-pub-browser/package.json" ]]; then
-  step "coffee-pub-browser: npm install"
-  (cd "$DEV_DIR/coffee-pub-browser" && npm install --no-audit --no-fund)
+# --- coffee-pub-studio dependencies ---------------------------------------
+if [[ -f "$DEV_DIR/coffee-pub-studio/package.json" ]]; then
+  step "coffee-pub-studio: npm install"
+  (cd "$DEV_DIR/coffee-pub-studio" && npm install --no-audit --no-fund)
   # npm sometimes skips Electron's binary download; fetch it explicitly.
-  if [[ ! -f "$DEV_DIR/coffee-pub-browser/node_modules/electron/path.txt" ]]; then
-    step "coffee-pub-browser: downloading the Electron binary"
-    (cd "$DEV_DIR/coffee-pub-browser" && node node_modules/electron/install.js)
+  if [[ ! -f "$DEV_DIR/coffee-pub-studio/node_modules/electron/path.txt" ]]; then
+    step "coffee-pub-studio: downloading the Electron binary"
+    (cd "$DEV_DIR/coffee-pub-studio" && node node_modules/electron/install.js)
   fi
-  ok "ready: cd ~/Developer/coffee-pub-browser && npm start"
+  ok "ready: cd ~/Developer/coffee-pub-studio && npm start"
 fi
 
 step "Done"

@@ -7,7 +7,7 @@ const { ConfigStore, LIMITS, REGION_LIMITS, DEFAULT_GROUP } = require('./config'
 const { ObsBridge } = require('./obs');
 const parkingGeometry = require('./parking');
 
-const APP_NAME = 'Coffee Pub Browser';
+const APP_NAME = 'Coffee Pub Studio';
 
 // Git revision recorded by scripts/write-build-info.js (absent in a bare checkout).
 function readBuildInfo() {
@@ -65,6 +65,26 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 // Let Foundry play audio without a click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// The app was called "Coffee Pub Browser" before v0.1.8. On the first launch
+// under the new name, carry the settings over from the old folder. The OBS
+// password cannot come along: the keychain entry it was encrypted with is
+// named after the app, so it has to be entered once more.
+function migrateLegacyUserData() {
+  const legacyDir = path.join(app.getPath('appData'), 'Coffee Pub Browser');
+  const userData = app.getPath('userData');
+  const target = path.join(userData, 'config.json');
+  const source = path.join(legacyDir, 'config.json');
+  try {
+    if (fs.existsSync(target) || !fs.existsSync(source)) return;
+    fs.mkdirSync(userData, { recursive: true });
+    fs.copyFileSync(source, target);
+    console.log(`Migrated settings from ${legacyDir}`);
+  } catch (err) {
+    console.warn('Could not migrate settings from the old app folder:', err.message);
+  }
+}
+migrateLegacyUserData();
 
 const configStore = new ConfigStore(path.join(app.getPath('userData'), 'config.json'));
 
