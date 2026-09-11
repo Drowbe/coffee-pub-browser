@@ -26,6 +26,8 @@ again, because it is encrypted with a keychain entry named after the app.
   CSS selector, and the app creates a cropped OBS source for it and keeps the crop current.
 - Session groups: windows in the same group share a Foundry login, windows in different
   groups do not.
+- Coffee Pub Tavern: sign in to the party's voice and video server and publish each player as
+  an OBS Browser Source with one click, kept in sync by the player's stable key.
 - An edge dock: a slim strip at the left or right edge of the screen. Park windows under it
   to get them out of the way while OBS keeps capturing them; hover it for a thumbnail of each
   window, click to bring one back, plus Start, Stop and Sync shortcuts. An optional menu bar
@@ -193,6 +195,34 @@ OBS source correct. Removing a region in the app leaves the source in OBS; delet
 you no longer need it. Only elements that stay in a fixed place work well; a chat message that
 scrolls away cannot be followed by a crop.
 
+### The party: Coffee Pub Tavern in OBS
+
+[Coffee Pub Tavern](https://github.com/Drowbe/coffee-pub-tavern) is the party's voice and video
+server. The app signs in to it as an admin and gives every player their own OBS Browser Source.
+
+1. On the Session tab, in **Tavern**, enter the server address (for example
+   `https://tavern.coffeepub.live`), your admin login and password, click **Save password**, then
+   **Sign in**. Tick **Sign in automatically** to reconnect at every launch.
+2. Set the defaults for new sources: width and height, what to **show** (video with the player's
+   images when the camera is off, video only, or images only), whether the player's audio comes
+   through OBS, and whether their name plate shows.
+3. Open the **Tavern** tab. Every account on the server is listed with a green dot while they are
+   at the table and their microphone and camera state. Click **Publish** on a player and a Browser
+   Source named `Tavern - <name>` appears in the current OBS scene, pointed at their view page at
+   the chosen size. **Publish all** does everyone at once. Each published player can override
+   the show, audio and plate defaults on their card.
+4. The app keeps the sources in sync: renaming a player on the Tavern renames the OBS source,
+   changing the defaults updates every source, and sources missing from OBS are created again on
+   **Sync OBS** or whenever OBS connects. Players are tracked by the Tavern's stable key, so
+   renames never break the link.
+
+**Unpublish** removes a player's source from OBS. **Copy link** puts the view link on the
+clipboard for a source you manage yourself. **Mute** and **Kick** act on a player at the table.
+**Manage party** opens the Tavern's manage page in your browser for passwords, links and images.
+
+The password is stored encrypted with the macOS keychain, like the OBS password. The stream key
+the sources use is fetched from the server at sign-in and never has to be copied.
+
 ### Retina displays
 
 On a Retina display macOS renders 2 physical pixels per point, so a 1920 x 1080 window is
@@ -221,7 +251,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 8,
+  "version": 9,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "autoConnect": false, "host": "127.0.0.1", "port": 4455 },
@@ -277,6 +307,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
+| `tavern` | Coffee Pub Tavern: `url`, `login`, `autoConnect`, default source `width`, `height`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, and `players`, a map from the player's Tavern key to `{ source, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
@@ -322,6 +353,7 @@ npm start
 src/main.js            Electron main process: windows, menu, IPC, permissions
 src/config.js          Config load/save/validation
 src/obs.js             OBS WebSocket bridge: keeps OBS sources pointed at the windows
+src/tavern.js          Coffee Pub Tavern bridge: admin sign-in, the party with live state, view links
 src/preload.js         Bridge between the control panel page and the main process
 src/bar-preload.js     Bridge between a window's bar page and the main process
 src/control/           Control panel page (HTML, CSS, JS)

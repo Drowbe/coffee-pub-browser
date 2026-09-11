@@ -43,6 +43,19 @@ contextBridge.exposeInMainWorld('coffeePub', {
   clearSession: () => ipcRenderer.invoke('session:clear'),
   revealConfig: () => ipcRenderer.invoke('config:reveal'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  tavernSetSettings: (settings) => ipcRenderer.invoke('tavern:setSettings', settings),
+  tavernSetPassword: (password) => ipcRenderer.invoke('tavern:setPassword', password),
+  tavernConnect: () => ipcRenderer.invoke('tavern:connect'),
+  tavernDisconnect: () => ipcRenderer.invoke('tavern:disconnect'),
+  tavernSync: () => ipcRenderer.invoke('tavern:sync'),
+  tavernPublish: (key, overrides) => ipcRenderer.invoke('tavern:publish', key, overrides),
+  tavernUnpublish: (key, removeFromObs) => ipcRenderer.invoke('tavern:unpublish', key, removeFromObs),
+  tavernPublishAll: () => ipcRenderer.invoke('tavern:publishAll'),
+  tavernUnpublishAll: (removeFromObs) => ipcRenderer.invoke('tavern:unpublishAll', removeFromObs),
+  tavernViewUrl: (key) => ipcRenderer.invoke('tavern:viewUrl', key),
+  tavernKick: (key) => ipcRenderer.invoke('tavern:kick', key),
+  tavernMute: (key) => ipcRenderer.invoke('tavern:mute', key),
+  tavernOpenManage: () => ipcRenderer.invoke('tavern:openManage'),
   onStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('status', listener);

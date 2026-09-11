@@ -82,6 +82,7 @@ function selectTab(name) {
     tab.classList.toggle('active', tab.dataset.tab === name);
   }
   $('tab-session').hidden = name !== 'session';
+  $('tab-tavern').hidden = name !== 'tavern';
   for (const [id, card] of cards) card.hidden = name !== `view:${id}`;
 }
 
@@ -175,6 +176,7 @@ function applyConfig(next) {
   obsAutoEl.checked = config.obs.autoConnect;
   if (document.activeElement !== obsHostEl) obsHostEl.value = config.obs.host;
   if (document.activeElement !== obsPortEl) obsPortEl.value = String(config.obs.port);
+  applyTavernConfig();
   if (!sameViews) {
     renderViewCards();
     return;
@@ -753,7 +755,252 @@ api.onStatus((next) => {
   renderDisplays();
   renderObs();
   renderStatus();
+  renderTavern();
 });
+
+// ---------------------------------------------------------------------------
+// Tavern
+// ---------------------------------------------------------------------------
+
+const tavernEls = {
+  url: $('tavern-url'),
+  login: $('tavern-login'),
+  password: $('tavern-password'),
+  auto: $('tavern-auto'),
+  width: $('tavern-width'),
+  height: $('tavern-height'),
+  mode: $('tavern-mode'),
+  audio: $('tavern-audio'),
+  plate: $('tavern-plate'),
+  connect: $('tavern-connect'),
+  tag: $('tavern-tag'),
+  dot: $('tavern-dot'),
+  status: $('tavern-status'),
+  party: $('tavern-party'),
+  empty: $('tavern-empty'),
+  summary: $('tavern-summary'),
+  title: $('tavern-title'),
+  syncNote: $('tavern-sync-note'),
+};
+/** @type {Map<string, HTMLElement>} */
+const playerCards = new Map();
+
+function applyTavernConfig() {
+  const t = config.tavern;
+  if (document.activeElement !== tavernEls.url) tavernEls.url.value = t.url;
+  if (document.activeElement !== tavernEls.login) tavernEls.login.value = t.login;
+  tavernEls.auto.checked = t.autoConnect;
+  if (document.activeElement !== tavernEls.width) tavernEls.width.value = String(t.width);
+  if (document.activeElement !== tavernEls.height) tavernEls.height.value = String(t.height);
+  tavernEls.mode.value = t.mode;
+  tavernEls.audio.checked = t.audio;
+  tavernEls.plate.checked = t.plate;
+}
+
+async function saveTavernSettings() {
+  await flushSave();
+  const next = {
+    url: tavernEls.url.value.trim(),
+    login: tavernEls.login.value.trim(),
+    autoConnect: tavernEls.auto.checked,
+    width: Number(tavernEls.width.value) || 640,
+    height: Number(tavernEls.height.value) || 360,
+    mode: tavernEls.mode.value,
+    audio: tavernEls.audio.checked,
+    plate: tavernEls.plate.checked,
+  };
+  config.tavern = { ...config.tavern, ...next };
+  try {
+    status.tavern = await api.tavernSetSettings(next);
+  } catch (err) {
+    reportError(err);
+  }
+  renderTavern();
+}
+for (const el of [tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.mode, tavernEls.audio, tavernEls.plate]) {
+  el.addEventListener('change', saveTavernSettings);
+}
+$('tavern-save-password').addEventListener('click', async () => {
+  await saveTavernSettings();
+  status.tavern = await api.tavernSetPassword(tavernEls.password.value);
+  tavernEls.password.value = '';
+  renderTavern();
+});
+tavernEls.password.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') $('tavern-save-password').click();
+});
+tavernEls.connect.addEventListener('click', async () => {
+  await saveTavernSettings();
+  try {
+    if (status.tavern.state === 'connected') status.tavern = await api.tavernDisconnect();
+    else status.tavern = await api.tavernConnect();
+  } catch (err) {
+    // the status line carries the reason
+  }
+  renderTavern();
+});
+$('tavern-manage').addEventListener('click', () => api.tavernOpenManage());
+$('tavern-publish-all').addEventListener('click', () => api.tavernPublishAll().catch(reportError));
+$('tavern-unpublish-all').addEventListener('click', () => {
+  if (!window.confirm('Remove every Tavern source from OBS?')) return;
+  api.tavernUnpublishAll(true).catch(reportError);
+});
+$('tavern-sync').addEventListener('click', () => api.tavernSync().catch(reportError));
+
+function playerCardFor(user) {
+  let card = playerCards.get(user.key);
+  if (card) return card;
+  card = $('player-template').content.firstElementChild.cloneNode(true);
+  card.dataset.key = user.key;
+  card.addEventListener('click', onPlayerClick);
+  card.addEventListener('change', onPlayerOption);
+  playerCards.set(user.key, card);
+  tavernEls.party.appendChild(card);
+  return card;
+}
+
+function renderTavern() {
+  const t = status.tavern || { state: 'disconnected', party: [], sync: { inputs: [] } };
+  const connected = t.state === 'connected';
+  const connecting = t.state === 'connecting';
+  tavernEls.tag.hidden = !connected;
+  tavernEls.dot.classList.toggle('on', connected);
+  tavernEls.connect.textContent = connected ? 'Sign out' : connecting ? 'Signing in...' : 'Sign in';
+  tavernEls.connect.disabled = connecting;
+  tavernEls.connect.classList.toggle('btn-primary', !connected && !connecting);
+  tavernEls.password.placeholder = t.hasPassword ? 'saved' : 'not set';
+  $('tavern-manage').disabled = !config || !config.tavern.url;
+  const labels = {
+    disconnected: t.message || 'Not signed in.',
+    connecting: t.message || 'Signing in...',
+    connected: t.message || 'Signed in.',
+    error: t.message || 'Sign-in failed.',
+  };
+  let text = labels[t.state] || '';
+  if (connected && t.version) text += ` Server ${t.version}.`;
+  tavernEls.status.textContent = text;
+  tavernEls.status.classList.toggle('hint-error', t.state === 'error');
+
+  // The party tab
+  const party = connected ? t.party : [];
+  const published = (config && config.tavern.players) || {};
+  const inputs = new Set((t.sync && t.sync.inputs) || []);
+  const obsConnected = status.obs && status.obs.state === 'connected';
+  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'The party';
+  tavernEls.empty.hidden = connected;
+  tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see the party here.';
+  const online = party.filter((u) => u.online).length;
+  const inObs = party.filter((u) => published[u.key]).length;
+  tavernEls.summary.textContent = connected ? `${online} of ${party.length} at the table, ${inObs} in OBS` : '';
+  $('tavern-publish-all').disabled = !connected || party.every((u) => published[u.key]);
+  $('tavern-unpublish-all').disabled = !Object.keys(published).length;
+  $('tavern-sync').disabled = !connected;
+
+  for (const user of party) {
+    const card = playerCardFor(user);
+    const entry = published[user.key];
+    card.querySelector('[data-role="name"]').textContent = user.displayName;
+    const thumb = card.querySelector('[data-role="thumb"]');
+    const thumbUrl = `${t.url}/img/${encodeURIComponent(user.key)}/novideo?s=${encodeURIComponent(t.streamKey)}`;
+    if (thumb.dataset.src !== thumbUrl) {
+      thumb.dataset.src = thumbUrl;
+      thumb.src = thumbUrl;
+    }
+    const dot = card.querySelector('[data-role="online"]');
+    dot.classList.toggle('on', Boolean(user.online));
+    dot.title = user.online ? 'at the table' : 'offline';
+    card.querySelector('[data-role="live"]').textContent = user.online
+      ? `${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
+      : 'offline';
+    card.querySelector('[data-role="published"]').hidden = !entry;
+    const chips = card.querySelector('[data-role="chips"]');
+    chips.textContent = '';
+    if (entry) {
+      const missing = obsConnected && !inputs.has(entry.source);
+      chips.appendChild(makeChip(entry.source, { missing, title: missing ? 'Not in OBS yet; Sync OBS creates it' : 'The OBS Browser Source for this player' }));
+    } else {
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = 'Not in OBS';
+      chips.appendChild(hint);
+    }
+    const options = card.querySelector('[data-role="options"]');
+    options.hidden = !entry;
+    if (entry && !isEditing(options)) {
+      card.querySelector('[data-pfield="mode"]').value = entry.mode || '';
+      card.querySelector('[data-pfield="audio"]').value = entry.audio === null ? '' : entry.audio ? 'on' : 'off';
+      card.querySelector('[data-pfield="plate"]').value = entry.plate === null ? '' : entry.plate ? 'on' : 'off';
+    }
+    const publish = card.querySelector('[data-action="publish"]');
+    publish.textContent = entry ? 'Unpublish' : 'Publish';
+    publish.classList.toggle('btn-primary', !entry);
+    publish.title = entry ? 'Remove this player\'s source from OBS' : 'Add a Browser Source for this player to the current OBS scene';
+    card.querySelector('[data-action="mute"]').hidden = !(user.online && user.online.micOn);
+    card.querySelector('[data-action="kick"]').hidden = !user.online;
+  }
+  for (const [key, card] of playerCards) {
+    if (!party.some((u) => u.key === key)) {
+      card.remove();
+      playerCards.delete(key);
+    }
+  }
+
+  const sync = t.sync;
+  if (connected && sync && sync.at) {
+    const bits = [];
+    if (sync.created.length) bits.push(`created ${sync.created.join(', ')}`);
+    if (sync.updated.length) bits.push(`updated ${sync.updated.join(', ')}`);
+    if (sync.renamed.length) bits.push(`renamed ${sync.renamed.join(', ')}`);
+    if (sync.missing.length) bits.push(`waiting for OBS: ${sync.missing.join(', ')}`);
+    tavernEls.syncNote.textContent = sync.note || (bits.length ? `Last sync ${bits.join('; ')}.` : 'Last sync: everything already in place.');
+  } else {
+    tavernEls.syncNote.textContent = '';
+  }
+}
+
+async function onPlayerClick(event) {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+  const card = event.currentTarget;
+  const key = card.dataset.key;
+  const published = config.tavern.players[key];
+  try {
+    if (button.dataset.action === 'publish') {
+      if (published) await api.tavernUnpublish(key, true);
+      else await api.tavernPublish(key, {});
+    } else if (button.dataset.action === 'copy-link') {
+      const url = await api.tavernViewUrl(key);
+      await navigator.clipboard.writeText(url);
+      setSaveState('View link copied');
+    } else if (button.dataset.action === 'mute') {
+      await api.tavernMute(key);
+    } else if (button.dataset.action === 'kick') {
+      if (!window.confirm('Kick this player from the table? They can rejoin.')) return;
+      await api.tavernKick(key);
+    }
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+async function onPlayerOption(event) {
+  const select = event.target.closest('[data-pfield]');
+  if (!select) return;
+  const card = event.currentTarget;
+  const key = card.dataset.key;
+  if (!config.tavern.players[key]) return;
+  const tri = (v) => (v === '' ? null : v === 'on');
+  const overrides = {
+    mode: card.querySelector('[data-pfield="mode"]').value,
+    audio: tri(card.querySelector('[data-pfield="audio"]').value),
+    plate: tri(card.querySelector('[data-pfield="plate"]').value),
+  };
+  try {
+    await api.tavernPublish(key, overrides);
+  } catch (err) {
+    reportError(err);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Region picker

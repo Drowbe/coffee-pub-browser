@@ -5,6 +5,7 @@ const fs = require('fs');
 const { app, BrowserWindow, WebContentsView, ipcMain, screen, shell, Menu, Tray, nativeImage, session, dialog, safeStorage } = require('electron');
 const { ConfigStore, LIMITS, REGION_LIMITS, DEFAULT_GROUP } = require('./config');
 const { ObsBridge } = require('./obs');
+const { TavernBridge } = require('./tavern');
 const parkingGeometry = require('./parking');
 
 const APP_NAME = 'Coffee Pub Studio';
@@ -123,10 +124,11 @@ let dockExpanded = false;
 // ---------------------------------------------------------------------------
 
 const OBS_SECRET_PATH = path.join(app.getPath('userData'), 'obs-secret.bin');
+const TAVERN_SECRET_PATH = path.join(app.getPath('userData'), 'tavern-secret.bin');
 
-function readObsPassword() {
+function readSecret(file) {
   try {
-    const raw = fs.readFileSync(OBS_SECRET_PATH);
+    const raw = fs.readFileSync(file);
     if (raw.length === 0) return '';
     if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(raw);
     return raw.toString('utf8');
@@ -135,22 +137,161 @@ function readObsPassword() {
   }
 }
 
-function writeObsPassword(password) {
-  const text = typeof password === 'string' ? password : '';
+function writeSecret(file, secret) {
+  const text = typeof secret === 'string' ? secret : '';
   if (!text) {
-    fs.rmSync(OBS_SECRET_PATH, { force: true });
+    fs.rmSync(file, { force: true });
     return;
   }
   const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(text) : Buffer.from(text, 'utf8');
-  fs.writeFileSync(OBS_SECRET_PATH, data);
+  fs.writeFileSync(file, data);
 }
+
+const readObsPassword = () => readSecret(OBS_SECRET_PATH);
+const writeObsPassword = (password) => writeSecret(OBS_SECRET_PATH, password);
 
 const obs = new ObsBridge({
   getSettings: () => configStore.get().obs,
   getPassword: readObsPassword,
 });
 obs.on('status', () => broadcastStatus());
-obs.on('connected', () => syncObs().catch(() => {}));
+obs.on('connected', () => {
+  syncObs().catch(() => {});
+  syncTavern().catch(() => {});
+});
+
+// ---------------------------------------------------------------------------
+// Coffee Pub Tavern (the party's voice and video; each player an OBS source)
+// ---------------------------------------------------------------------------
+
+const tavern = new TavernBridge({
+  getSettings: () => configStore.get().tavern,
+  getPassword: () => readSecret(TAVERN_SECRET_PATH),
+});
+// What the last sync found in OBS, shown on the Tavern tab.
+let tavernSync = { at: 0, inputs: [], created: [], updated: [], renamed: [], missing: [], note: '' };
+tavern.on('status', () => broadcastStatus());
+tavern.on('connected', () => syncTavern().catch(() => {}));
+tavern.on('party', () => syncTavern().catch(() => {}));
+
+function tavernSourceName(user) {
+  return `Tavern - ${user.displayName}`;
+}
+
+// Effective view options for a player: per-player overrides over the defaults.
+function tavernPlayerOptions(entry) {
+  const t = configStore.get().tavern;
+  return {
+    mode: entry.mode || t.mode,
+    audio: entry.audio === null || entry.audio === undefined ? t.audio : entry.audio,
+    plate: entry.plate === null || entry.plate === undefined ? t.plate : entry.plate,
+    width: t.width,
+    height: t.height,
+  };
+}
+
+// Make OBS match the published players: one Browser Source each, named after
+// the player, pointed at their view link at the chosen size.
+async function syncTavern() {
+  const report = { at: Date.now(), inputs: [], created: [], updated: [], renamed: [], missing: [], note: '' };
+  const t = configStore.get().tavern;
+  const entries = Object.entries(t.players);
+  if (!tavern.connected) {
+    report.note = 'Not signed in to the Tavern.';
+    tavernSync = report;
+    broadcastStatus();
+    return report;
+  }
+  if (!obs.connected) {
+    report.note = 'OBS is not connected; sources are created when it is.';
+    report.missing = entries.map(([, e]) => e.source);
+    tavernSync = report;
+    broadcastStatus();
+    return report;
+  }
+  const inputs = await obs.browserInputs();
+  report.inputs = inputs.map((i) => i.name);
+  const players = { ...t.players };
+  let changedConfig = false;
+  for (const [key, entry] of entries) {
+    const user = tavern.party.find((u) => u.key === key);
+    if (!user) continue; // deleted on the server; the card shows it
+    const options = tavernPlayerOptions(entry);
+    const wanted = { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: options.audio };
+    let name = entry.source;
+    const preferred = tavernSourceName(user);
+    // Follow a rename on the server, unless the new name is taken by something else.
+    if (name !== preferred && !inputs.some((i) => i.name === preferred) && !Object.values(players).some((p) => p.source === preferred)) {
+      if (inputs.some((i) => i.name === name)) {
+        await obs.renameInput(name, preferred);
+        report.renamed.push(`${name} -> ${preferred}`);
+      }
+      const input = inputs.find((i) => i.name === name);
+      if (input) input.name = preferred;
+      name = preferred;
+      players[key] = { ...entry, source: name };
+      changedConfig = true;
+    }
+    const existing = inputs.find((i) => i.name === name);
+    if (!existing) {
+      await obs.createBrowserInput(name, wanted);
+      inputs.push({ name, ...wanted, rerouteAudio: wanted.audio });
+      report.created.push(name);
+    } else if (existing.url !== wanted.url || existing.width !== wanted.width || existing.height !== wanted.height || existing.rerouteAudio !== wanted.audio) {
+      await obs.setBrowserInput(name, wanted);
+      Object.assign(existing, wanted, { rerouteAudio: wanted.audio });
+      report.updated.push(name);
+    }
+  }
+  if (changedConfig) {
+    const current = configStore.get();
+    configStore.save({ ...current, tavern: { ...current.tavern, players } });
+  }
+  report.inputs = inputs.map((i) => i.name);
+  tavernSync = report;
+  broadcastStatus();
+  return report;
+}
+
+async function publishPlayer(key, overrides = {}) {
+  const user = tavern.party.find((u) => u.key === key);
+  if (!user) throw new Error('That player is not on the Tavern any more.');
+  const current = configStore.get();
+  const players = { ...current.tavern.players };
+  const entry = players[key] || { source: '' };
+  if (!entry.source) {
+    // A fresh name: never take over a Browser Source that is not ours.
+    const ours = new Set(Object.values(players).map((p) => p.source));
+    const taken = new Set(tavernSync.inputs.filter((n) => !ours.has(n)));
+    let name = tavernSourceName(user);
+    let n = 2;
+    while (taken.has(name)) name = `${tavernSourceName(user)} ${n++}`;
+    entry.source = name;
+  }
+  players[key] = {
+    source: entry.source,
+    mode: overrides.mode !== undefined ? overrides.mode : entry.mode || '',
+    audio: overrides.audio !== undefined ? overrides.audio : entry.audio ?? null,
+    plate: overrides.plate !== undefined ? overrides.plate : entry.plate ?? null,
+  };
+  configStore.save({ ...current, tavern: { ...current.tavern, players } });
+  await syncTavern();
+  return players[key];
+}
+
+async function unpublishPlayer(key, removeFromObs = true) {
+  const current = configStore.get();
+  const players = { ...current.tavern.players };
+  const entry = players[key];
+  if (!entry) return;
+  delete players[key];
+  configStore.save({ ...current, tavern: { ...current.tavern, players } });
+  if (removeFromObs && obs.connected) {
+    const inputs = await obs.browserInputs().catch(() => []);
+    if (inputs.some((i) => i.name === entry.source)) await obs.removeInput(entry.source);
+  }
+  await syncTavern();
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -207,6 +348,7 @@ function fullStatus() {
     displays: screen.getAllDisplays().map(displaySummary),
     config: configStore.get(),
     obs: { ...obs.status(), hasPassword: readObsPassword() !== '' },
+    tavern: { ...tavern.status(), hasPassword: readSecret(TAVERN_SECRET_PATH) !== '', sync: tavernSync },
     collapsed,
     parkedIds: [...parked.keys()],
   };
@@ -1156,6 +1298,62 @@ function registerIpc() {
     await syncObs().catch(() => {});
     broadcastStatus();
   });
+  // --- Tavern ---
+  ipcMain.handle('tavern:setSettings', async (_event, settings) => {
+    const current = configStore.get();
+    const previous = current.tavern;
+    const saved = configStore.save({ ...current, tavern: { ...previous, ...settings } });
+    const next = saved.tavern;
+    if (tavern.connected && (next.url !== previous.url || next.login !== previous.login)) {
+      await tavern.disconnect();
+    }
+    if (next.autoConnect && !tavern.connected && next.url) await tavern.connect().catch(() => {});
+    // Size, mode, audio or plate changes reach every published source.
+    await syncTavern().catch(() => {});
+    broadcastStatus();
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:setPassword', async (_event, password) => {
+    writeSecret(TAVERN_SECRET_PATH, password);
+    if (tavern.connected) await tavern.disconnect();
+    if (configStore.get().tavern.autoConnect) await tavern.connect().catch(() => {});
+    broadcastStatus();
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:connect', async () => {
+    await tavern.connect();
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:disconnect', async () => {
+    await tavern.disconnect();
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:sync', () => syncTavern());
+  ipcMain.handle('tavern:publish', (_event, key, overrides) => publishPlayer(String(key), overrides || {}));
+  ipcMain.handle('tavern:unpublish', (_event, key, removeFromObs) => unpublishPlayer(String(key), removeFromObs !== false));
+  ipcMain.handle('tavern:publishAll', async () => {
+    const published = configStore.get().tavern.players;
+    for (const user of tavern.party) {
+      if (!published[user.key]) await publishPlayer(user.key);
+    }
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:unpublishAll', async (_event, removeFromObs) => {
+    for (const key of Object.keys(configStore.get().tavern.players)) await unpublishPlayer(key, removeFromObs !== false);
+    return fullStatus().tavern;
+  });
+  ipcMain.handle('tavern:viewUrl', (_event, key) => {
+    const user = tavern.party.find((u) => u.key === key);
+    if (!user) throw new Error('Unknown player.');
+    const entry = configStore.get().tavern.players[key] || {};
+    return tavern.viewUrl(user, tavernPlayerOptions(entry));
+  });
+  ipcMain.handle('tavern:kick', (_event, key) => tavern.kick(String(key)));
+  ipcMain.handle('tavern:mute', (_event, key) => tavern.mute(String(key)));
+  ipcMain.handle('tavern:openManage', () => {
+    const { url } = configStore.get().tavern;
+    if (url) shell.openExternal(`${url}/admin`);
+  });
   // --- Regions ---
   ipcMain.handle('view:snapshot', async (_event, id) => {
     const win = viewWindows.get(id);
@@ -1361,6 +1559,7 @@ if (!app.requestSingleInstanceLock()) {
     createControlWindow();
     if (configStore.get().openOnLaunch) openLaunchViews();
     obs.start().catch(() => {});
+    tavern.start().catch(() => {});
 
     const onDisplays = () => {
       layoutDock();
@@ -1375,6 +1574,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
     obs.stop().catch(() => {});
+    tavern.stop().catch(() => {});
   });
   // Standard macOS behaviour: the app stays alive in the Dock with no windows.
   app.on('window-all-closed', () => {

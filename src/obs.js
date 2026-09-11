@@ -10,6 +10,7 @@ const { OBSWebSocket } = require('obs-websocket-js/json');
 
 const INPUT_KIND = 'screen_capture'; // macOS Screen Capture (ScreenCaptureKit)
 const CAPTURE_TYPE_WINDOW = 1; // settings.type: 0 display, 1 window, 2 application
+const BROWSER_KIND = 'browser_source';
 const CROP_FILTER_KIND = 'crop_filter'; // OBS "Crop/Pad"
 const CROP_FILTER_NAME = 'Coffee Pub Crop';
 const RECONNECT_MS = 10000;
@@ -265,6 +266,50 @@ class ObsBridge extends EventEmitter {
     return changed;
   }
 
+  // --- Browser sources (Coffee Pub Tavern players) --------------------------
+
+  // Every Browser Source in OBS with its URL and size.
+  async browserInputs() {
+    if (!this.connected) return [];
+    const { inputs } = await this.obs.call('GetInputList', { inputKind: BROWSER_KIND });
+    const result = [];
+    for (const input of inputs) {
+      const { inputSettings } = await this.obs.call('GetInputSettings', { inputName: input.inputName });
+      result.push({
+        name: input.inputName,
+        url: inputSettings.url || '',
+        width: inputSettings.width,
+        height: inputSettings.height,
+        rerouteAudio: Boolean(inputSettings.reroute_audio),
+      });
+    }
+    return result;
+  }
+
+  async createBrowserInput(inputName, { url, width, height, audio }) {
+    const { currentProgramSceneName } = await this.obs.call('GetCurrentProgramScene');
+    await this.obs.call('CreateInput', {
+      sceneName: currentProgramSceneName,
+      inputName,
+      inputKind: BROWSER_KIND,
+      inputSettings: { url, width, height, shutdown: false, restart_when_active: false, reroute_audio: Boolean(audio) },
+      sceneItemEnabled: true,
+    });
+    return inputName;
+  }
+
+  async setBrowserInput(inputName, { url, width, height, audio }) {
+    await this.obs.call('SetInputSettings', {
+      inputName,
+      inputSettings: { url, width, height, reroute_audio: Boolean(audio) },
+      overlay: true,
+    });
+  }
+
+  async renameInput(inputName, newInputName) {
+    await this.obs.call('SetInputName', { inputName, newInputName });
+  }
+
   async createInput(inputName, windowId) {
     const { currentProgramSceneName } = await this.obs.call('GetCurrentProgramScene');
     await this.obs.call('CreateInput', {
@@ -360,4 +405,4 @@ function describeError(err) {
   return msg;
 }
 
-module.exports = { ObsBridge, INPUT_KIND };
+module.exports = { ObsBridge, INPUT_KIND, BROWSER_KIND };

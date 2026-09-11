@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 8;
+const CONFIG_VERSION = 9;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -102,6 +102,43 @@ function defaultObs() {
   return { autoConnect: false, host: '127.0.0.1', port: 4455 };
 }
 
+// Coffee Pub Tavern: the party's voice and video server. Each published
+// player is an OBS Browser Source pointed at their view page.
+const TAVERN_MODES = ['auto', 'video', 'avatar'];
+
+function defaultTavern() {
+  return { url: '', login: '', autoConnect: true, width: 640, height: 360, mode: 'auto', audio: false, plate: false, players: {} };
+}
+
+function sanitizeTavern(input) {
+  const d = defaultTavern();
+  const src = input && typeof input === 'object' ? input : {};
+  const players = {};
+  if (src.players && typeof src.players === 'object') {
+    for (const [key, value] of Object.entries(src.players)) {
+      if (!/^[a-z0-9]{4,16}$/.test(key) || !value || typeof value !== 'object') continue;
+      players[key] = {
+        source: typeof value.source === 'string' ? value.source.trim().slice(0, 200) : '',
+        mode: TAVERN_MODES.includes(value.mode) ? value.mode : '',
+        audio: value.audio === true || value.audio === false ? value.audio : null,
+        plate: value.plate === true || value.plate === false ? value.plate : null,
+      };
+      if (!players[key].source) delete players[key];
+    }
+  }
+  return {
+    url: sanitizeUrl(src.url).replace(/\/+$/, ''),
+    login: typeof src.login === 'string' ? src.login.trim().slice(0, 40) : d.login,
+    autoConnect: src.autoConnect === undefined ? d.autoConnect : Boolean(src.autoConnect),
+    width: clamp(toInt(src.width, d.width), 64, 3840),
+    height: clamp(toInt(src.height, d.height), 64, 2160),
+    mode: TAVERN_MODES.includes(src.mode) ? src.mode : d.mode,
+    audio: src.audio === undefined ? d.audio : Boolean(src.audio),
+    plate: src.plate === undefined ? d.plate : Boolean(src.plate),
+    players,
+  };
+}
+
 function defaultConfig() {
   return {
     version: CONFIG_VERSION,
@@ -111,6 +148,7 @@ function defaultConfig() {
     arrangeDisplayId: null,
     dock: defaultDock(),
     obs: defaultObs(),
+    tavern: defaultTavern(),
     views: [defaultView(0), defaultView(1)],
   };
 }
@@ -216,6 +254,7 @@ function sanitizeConfig(input) {
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
     dock: sanitizeDock(src.dock),
     obs: sanitizeObs(src.obs),
+    tavern: sanitizeTavern(src.tavern),
     views,
   };
 }
@@ -319,4 +358,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP };
+module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP, TAVERN_MODES };
