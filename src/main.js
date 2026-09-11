@@ -179,11 +179,11 @@ function tavernSourceName(user, kind = 'player') {
 }
 
 // The Player source: video, or the player image when the camera is off, with
-// the talking border and muted badge as set on the Tavern. Audio always on
-// and routed to the OBS mixer.
+// the talking border, muted badge and name plate as set on the Tavern. Audio
+// always on and routed to the OBS mixer.
 function tavernPlayerSource(user) {
   const t = configStore.get().tavern;
-  return { url: tavern.viewUrl(user, { kind: 'player', plate: t.plate }), width: t.playerWidth, height: t.playerHeight, audio: true };
+  return { url: tavern.viewUrl(user, { kind: 'player' }), width: t.playerWidth, height: t.playerHeight, audio: true };
 }
 
 // The Character source: the character image with talking and muted images on
@@ -1407,7 +1407,7 @@ function registerIpc() {
       await tavern.disconnect();
     }
     if (next.enabled && next.autoConnect && !tavern.connected && next.url) await tavern.connect().catch(() => {});
-    // Size or plate changes reach every published source.
+    // Size changes reach every published source.
     await syncTavern().catch(() => {});
     broadcastStatus();
     return fullStatus().tavern;

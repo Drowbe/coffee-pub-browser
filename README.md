@@ -216,9 +216,9 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    `https://tavern.coffeepub.live`), your admin login and password, click **Save password**, then
    **Sign in**. Tick **Sign in automatically** to reconnect at every launch.
 2. Set the source sizes. The **Player source** is the player's video, or their player image
-   when the camera is off, with the talking border and muted badge set on the Tavern. Width and
-   height, with **Constrain proportions** keeping them at 16:9, and an optional **name plate**.
-   Audio is always included; the source's own **Control audio via OBS** in OBS decides whether
+   when the camera is off, with the talking border, muted badge and name plate set on the
+   Tavern in each user's Player section. Width and height, with **Constrain proportions**
+   keeping them at 16:9. Audio is always included; the source's own **Control audio via OBS** in OBS decides whether
    it reaches the mixer. The **Character source** is the character image with the talking and
    muted images on top, transparent until they talk or mute when there is no character image,
    made for overlaying a character bar. Set its size, and tick **Publish the character with
@@ -324,7 +324,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`, `plate`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ source, characterSource }`. The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ source, characterSource }`. The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

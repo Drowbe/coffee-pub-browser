@@ -117,7 +117,7 @@ function defaultObs() {
 function defaultTavern() {
   return {
     enabled: false, url: '', login: '', autoConnect: true,
-    playerWidth: 640, playerHeight: 360, lockRatio: true, plate: false,
+    playerWidth: 640, playerHeight: 360, lockRatio: true,
     characterWidth: 256, characterHeight: 256, characterWithPlayer: false,
     players: {},
   };
@@ -147,7 +147,6 @@ function sanitizeTavern(input) {
     playerWidth: clamp(toInt(src.playerWidth ?? src.width, d.playerWidth), 64, 3840),
     playerHeight: clamp(toInt(src.playerHeight ?? src.height, d.playerHeight), 64, 2160),
     lockRatio: src.lockRatio === undefined ? d.lockRatio : Boolean(src.lockRatio),
-    plate: src.plate === undefined ? d.plate : Boolean(src.plate),
     characterWidth: clamp(toInt(src.characterWidth ?? src.statusWidth, d.characterWidth), 32, 3840),
     characterHeight: clamp(toInt(src.characterHeight ?? src.statusHeight, d.characterHeight), 32, 2160),
     characterWithPlayer: Boolean(src.characterWithPlayer ?? src.indicator ?? d.characterWithPlayer),
