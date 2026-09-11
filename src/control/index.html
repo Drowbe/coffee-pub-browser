@@ -25,7 +25,7 @@
   <nav class="tabs" id="tabs">
     <button class="tab" data-tab="session" type="button">Session <span class="dot" id="obs-dot" title="OBS connection"></span></button>
     <span id="view-tabs" class="view-tabs"></span>
-    <button class="tab" data-tab="tavern" type="button">Tavern <span class="dot" id="tavern-dot" title="Tavern connection"></span></button>
+    <button class="tab" data-tab="tavern" id="tavern-tab" type="button" hidden>Tavern <span class="dot" id="tavern-dot" title="Tavern connection"></span></button>
     <button class="tab tab-add" data-tab="add" type="button" title="Add a window">+</button>
   </nav>
 
@@ -133,9 +133,16 @@
           </div>
         </div>
         <p class="hint">
-          Coffee Pub Tavern is the party's voice and video. Sign in with an admin account and the
+          Coffee Pub Tavern is the voice and video server for the people at your table. Sign in with an admin account and the
           <strong>Tavern</strong> tab lists everyone; publish a player to give them their own OBS Browser Source.
         </p>
+        <div class="row">
+          <label class="check">
+            <input id="tavern-enabled" type="checkbox">
+            <span>Enable Coffee Pub Tavern</span>
+          </label>
+        </div>
+        <div id="tavern-settings" hidden>
         <div class="row">
           <label class="check">
             <input id="tavern-auto" type="checkbox">
@@ -196,6 +203,7 @@
         </div>
         <p class="hint">The indicator is a second source that stays transparent until the player talks (their Talking image) or mutes (their Muted image). Set those images on the Tavern's manage page.</p>
         <p class="hint" id="tavern-status">Not signed in.</p>
+        </div>
       </div>
     </section>
 

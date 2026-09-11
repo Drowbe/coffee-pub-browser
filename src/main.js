@@ -1353,10 +1353,10 @@ function registerIpc() {
     const previous = current.tavern;
     const saved = configStore.save({ ...current, tavern: { ...previous, ...settings } });
     const next = saved.tavern;
-    if (tavern.connected && (next.url !== previous.url || next.login !== previous.login)) {
+    if (tavern.connected && (!next.enabled || next.url !== previous.url || next.login !== previous.login)) {
       await tavern.disconnect();
     }
-    if (next.autoConnect && !tavern.connected && next.url) await tavern.connect().catch(() => {});
+    if (next.enabled && next.autoConnect && !tavern.connected && next.url) await tavern.connect().catch(() => {});
     // Size, mode, audio or plate changes reach every published source.
     await syncTavern().catch(() => {});
     broadcastStatus();
@@ -1365,7 +1365,8 @@ function registerIpc() {
   ipcMain.handle('tavern:setPassword', async (_event, password) => {
     writeSecret(TAVERN_SECRET_PATH, password);
     if (tavern.connected) await tavern.disconnect();
-    if (configStore.get().tavern.autoConnect) await tavern.connect().catch(() => {});
+    const t = configStore.get().tavern;
+    if (t.enabled && t.autoConnect) await tavern.connect().catch(() => {});
     broadcastStatus();
     return fullStatus().tavern;
   });

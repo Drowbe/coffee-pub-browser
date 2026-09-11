@@ -76,6 +76,7 @@ function recallTab() {
 function selectTab(name) {
   if (name === 'general' || name === 'obs') name = 'session';
   if (name.startsWith('view:') && !config.views.some((v) => `view:${v.id}` === name)) name = 'session';
+  if (name === 'tavern' && !config.tavern.enabled) name = 'session';
   activeTab = name;
   rememberTab(name);
   for (const tab of document.querySelectorAll('.tab')) {
@@ -763,6 +764,9 @@ api.onStatus((next) => {
 // ---------------------------------------------------------------------------
 
 const tavernEls = {
+  enabled: $('tavern-enabled'),
+  settings: $('tavern-settings'),
+  tab: $('tavern-tab'),
   url: $('tavern-url'),
   login: $('tavern-login'),
   password: $('tavern-password'),
@@ -792,6 +796,12 @@ const playerCards = new Map();
 
 function applyTavernConfig() {
   const t = config.tavern;
+  tavernEls.enabled.checked = t.enabled;
+  tavernEls.settings.hidden = !t.enabled;
+  tavernEls.tab.hidden = !t.enabled;
+  $('tavern-manage').hidden = !t.enabled;
+  $('tavern-connect').hidden = !t.enabled;
+  if (!t.enabled && activeTab === 'tavern') selectTab('session');
   if (document.activeElement !== tavernEls.url) tavernEls.url.value = t.url;
   if (document.activeElement !== tavernEls.login) tavernEls.login.value = t.login;
   tavernEls.auto.checked = t.autoConnect;
@@ -819,6 +829,7 @@ tavernEls.height.addEventListener('input', () => {
 async function saveTavernSettings() {
   await flushSave();
   const next = {
+    enabled: tavernEls.enabled.checked,
     url: tavernEls.url.value.trim(),
     login: tavernEls.login.value.trim(),
     autoConnect: tavernEls.auto.checked,
@@ -842,7 +853,7 @@ async function saveTavernSettings() {
   }
   renderTavern();
 }
-for (const el of [tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.lock, tavernEls.mode, tavernEls.audio, tavernEls.plate, tavernEls.border, tavernEls.indicator, tavernEls.statusWidth, tavernEls.statusHeight]) {
+for (const el of [tavernEls.enabled, tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.lock, tavernEls.mode, tavernEls.audio, tavernEls.plate, tavernEls.border, tavernEls.indicator, tavernEls.statusWidth, tavernEls.statusHeight]) {
   el.addEventListener('change', saveTavernSettings);
 }
 $('tavern-save-password').addEventListener('click', async () => {

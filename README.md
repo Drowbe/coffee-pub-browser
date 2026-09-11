@@ -200,7 +200,8 @@ scrolls away cannot be followed by a crop.
 [Coffee Pub Tavern](https://github.com/Drowbe/coffee-pub-tavern) is the party's voice and video
 server. The app signs in to it as an admin and gives every player their own OBS Browser Source.
 
-1. On the Session tab, in **Tavern**, enter the server address (for example
+1. On the Session tab, in **Tavern**, tick **Enable Coffee Pub Tavern** (the Tavern tab only
+   shows while it is on), then enter the server address (for example
    `https://tavern.coffeepub.live`), your admin login and password, click **Save password**, then
    **Sign in**. Tick **Sign in automatically** to reconnect at every launch.
 2. Set the defaults for new sources: width and height (with **Constrain proportions** keeping
@@ -314,7 +315,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `url`, `login`, `autoConnect`, default source `width`, `height`, `lockRatio`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, `border`; the indicator's `indicator` (publish one with each player), `statusWidth`, `statusHeight`; and `players`, a map from the player's Tavern key to `{ source, statusSource, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, default source `width`, `height`, `lockRatio`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, `border`; the indicator's `indicator` (publish one with each player), `statusWidth`, `statusHeight`; and `players`, a map from the player's Tavern key to `{ source, statusSource, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

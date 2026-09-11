@@ -108,7 +108,7 @@ const TAVERN_MODES = ['auto', 'video', 'avatar'];
 
 function defaultTavern() {
   return {
-    url: '', login: '', autoConnect: true,
+    enabled: false, url: '', login: '', autoConnect: true,
     width: 640, height: 360, lockRatio: true, mode: 'auto', audio: false, plate: false, border: true,
     indicator: false, statusWidth: 256, statusHeight: 256,
     players: {},
@@ -133,6 +133,7 @@ function sanitizeTavern(input) {
     }
   }
   return {
+    enabled: src.enabled === undefined ? d.enabled : Boolean(src.enabled),
     url: sanitizeUrl(src.url).replace(/\/+$/, ''),
     login: typeof src.login === 'string' ? src.login.trim().slice(0, 40) : d.login,
     autoConnect: src.autoConnect === undefined ? d.autoConnect : Boolean(src.autoConnect),

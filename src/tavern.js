@@ -59,8 +59,8 @@ class TavernBridge extends EventEmitter {
 
   async start() {
     clearTimeout(this.reconnectTimer);
-    const { url, autoConnect } = this.getSettings();
-    if (!autoConnect || !url) return;
+    const { enabled, url, autoConnect } = this.getSettings();
+    if (!enabled || !autoConnect || !url) return;
     await this.connect().catch(() => {});
   }
 
@@ -81,14 +81,19 @@ class TavernBridge extends EventEmitter {
 
   scheduleReconnect() {
     clearTimeout(this.reconnectTimer);
-    if (!this.getSettings().autoConnect || this.suspended) return;
+    const { enabled, autoConnect } = this.getSettings();
+    if (!enabled || !autoConnect || this.suspended) return;
     this.reconnectTimer = setTimeout(() => this.connect().catch(() => {}), RECONNECT_MS);
   }
 
   async connect() {
     if (this.connecting) return this.connecting;
     this.suspended = false;
-    const { url, login } = this.getSettings();
+    const { enabled, url, login } = this.getSettings();
+    if (!enabled) {
+      this.setState('disconnected', 'Coffee Pub Tavern is turned off.');
+      throw new Error(this.message);
+    }
     if (!url) {
       this.setState('error', 'Enter the Tavern address first.');
       throw new Error(this.message);
