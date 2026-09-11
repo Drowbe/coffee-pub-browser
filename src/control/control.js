@@ -305,6 +305,14 @@ function renderStatus() {
     const size = s.open ? `${s.width} × ${s.height}` : `${view.width} × ${view.height}`;
     const captured = s.open && s.scaleFactor !== 1 ? ` (${s.captureWidth} × ${s.captureHeight} captured)` : '';
     card.querySelector('[data-status="title"]').textContent = `Coffee Pub Studio - ${view.label}  ·  page ${size}${captured}`;
+    card.querySelector('[data-status="audio"]').textContent = !s.open
+      ? 'Start the window to see whether its page is making sound.'
+      : s.muted
+        ? 'Muted here (Mute audio is ticked).'
+        : s.audible
+          ? 'Playing: the page is making sound right now.'
+          : 'Silent right now. Nothing is playing, or the page is still waiting for a first interaction: click Wake audio, or click once inside the page.';
+    card.querySelector('[data-action="wake-audio"]').disabled = !s.open;
 
     renderWindowSource(card, view, s, o, connected);
     renderRegions(card, view, s, o, connected);
@@ -610,6 +618,9 @@ async function onCardClick(event) {
         break;
       case 'devtools':
         await api.devToolsView(id);
+        break;
+      case 'wake-audio':
+        await api.wakeAudioView(id);
         break;
       case 'add-window-source':
         await api.addWindowSource(id);

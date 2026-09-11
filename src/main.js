@@ -66,6 +66,11 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 // Let Foundry play audio without a click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Play audio from the app's own process rather than Chromium's audio helper
+// process: macOS window capture (ScreenCaptureKit) attributes sound to the
+// process that owns the captured window, so audio from a helper never
+// reaches the OBS source.
+app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 
 // The app was called "Coffee Pub Browser" before v0.1.8. On the first launch
 // under the new name, carry the settings over from the old folder. The OBS
@@ -372,6 +377,21 @@ function displaySummary(display) {
   };
 }
 
+// A user gesture for the page: F16 has no meaning to Foundry or the page,
+// but a key press counts as the interaction that lets audio start.
+function wakeAudio(id) {
+  const wc = pageOf(id);
+  if (!wc || wc.isDestroyed()) return false;
+  try {
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'F16' });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'F16' });
+    return true;
+  } catch (err) {
+    console.warn(`[${id}] wake audio: ${err.message}`);
+    return false;
+  }
+}
+
 function viewStatus(view) {
   const win = viewWindows.get(view.id);
   if (!isAlive(win)) {
@@ -397,6 +417,7 @@ function viewStatus(view) {
     url: wc ? wc.getURL() : '',
     loading: wc ? wc.isLoading() : false,
     muted: wc ? wc.isAudioMuted() : false,
+    audible: wc ? wc.isCurrentlyAudible() : false,
     barHeight: BAR_HEIGHT,
     cropTop: Math.round(BAR_HEIGHT * display.scaleFactor),
   };
@@ -687,16 +708,9 @@ function createViewWindow(view) {
   wc.on('did-finish-load', () => {
     const current = configStore.getView(view.id);
     if (!current || !current.wakeAudio) return;
-    setTimeout(() => {
-      if (wc.isDestroyed() || !isAlive(win)) return;
-      try {
-        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Shift' });
-        wc.sendInputEvent({ type: 'keyUp', keyCode: 'Shift' });
-      } catch (err) {
-        console.warn(`[${view.id}] wake audio: ${err.message}`);
-      }
-    }, 1500);
+    setTimeout(() => wakeAudio(view.id), 1500);
   });
+  wc.on('audio-state-changed', broadcastStatus);
   wc.on('did-start-loading', broadcastStatus);
   wc.on('did-stop-loading', broadcastStatus);
   wc.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
@@ -1617,6 +1631,10 @@ function registerIpc() {
   ipcMain.handle('view:devtools', (_event, id) => {
     const wc = pageOf(id);
     if (wc) wc.toggleDevTools();
+  });
+  ipcMain.handle('view:wakeAudio', (_event, id) => {
+    if (!wakeAudio(id)) throw new Error('Start the window first.');
+    setTimeout(broadcastStatus, 800);
   });
   ipcMain.handle('views:arrange', (_event, displayId) => arrangeViews(displayId));
   ipcMain.handle('views:openAll', () => openAllViews());

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('coffeePub', {
   reloadView: (id) => ipcRenderer.invoke('view:reload', id),
   resetView: (id) => ipcRenderer.invoke('view:reset', id),
   devToolsView: (id) => ipcRenderer.invoke('view:devtools', id),
+  wakeAudioView: (id) => ipcRenderer.invoke('view:wakeAudio', id),
   obsSetSettings: (settings) => ipcRenderer.invoke('obs:setSettings', settings),
   obsSetPassword: (password) => ipcRenderer.invoke('obs:setPassword', password),
   obsConnect: () => ipcRenderer.invoke('obs:connect'),
