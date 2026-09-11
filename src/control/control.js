@@ -947,16 +947,27 @@ function renderTavern() {
   tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Users';
   tavernEls.empty.hidden = connected;
   tavernEls.empty.textContent = t.state === 'error' ? t.message : 'Sign in to the Tavern on the Session tab to see the party here.';
+  // What each user gets: the ticks, defaulting to Player on and Character
+  // per the Session tab; the sources exist while they are published.
+  const entryFor = (key) => {
+    const e = published[key] || {};
+    return {
+      player: e.player === undefined ? true : e.player,
+      character: e.character === undefined ? Boolean(config && config.tavern.characterWithPlayer) : e.character,
+      source: e.source || '',
+      characterSource: e.characterSource || '',
+    };
+  };
   const online = party.filter((u) => u.online).length;
-  const inObs = party.filter((u) => published[u.key] && published[u.key].source).length;
+  const inObs = party.filter((u) => isPublished(entryFor(u.key))).length;
   tavernEls.summary.textContent = connected ? `${online} of ${party.length} at the table, ${inObs} in OBS` : '';
-  $('tavern-publish-all').disabled = !connected || party.every((u) => published[u.key] && published[u.key].source);
-  $('tavern-unpublish-all').disabled = !Object.keys(published).length;
+  $('tavern-publish-all').disabled = !connected || party.every((u) => isPublished(entryFor(u.key)) || !(entryFor(u.key).player || entryFor(u.key).character));
+  $('tavern-unpublish-all').disabled = !Object.keys(published).some((k) => isPublished(published[k]));
   $('tavern-sync').disabled = !connected;
 
   for (const user of party) {
     const card = playerCardFor(user);
-    const entry = published[user.key];
+    const entry = entryFor(user.key);
     card.querySelector('[data-role="name"]').textContent = user.displayName;
     const thumb = card.querySelector('[data-role="thumb"]');
     const thumbUrl = `${t.url}/img/${encodeURIComponent(user.key)}/player?s=${encodeURIComponent(t.streamKey)}`;
@@ -970,29 +981,30 @@ function renderTavern() {
     card.querySelector('[data-role="live"]').textContent = user.online
       ? `${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
       : 'offline';
-    const hasMain = Boolean(entry && entry.source);
-    const hasCharacter = Boolean(entry && entry.characterSource);
-    card.querySelector('[data-role="published"]').hidden = !hasMain && !hasCharacter;
+    const isOn = isPublished(entry);
+    card.querySelector('[data-role="published"]').hidden = !isOn;
     const chips = card.querySelector('[data-role="chips"]');
     chips.textContent = '';
-    for (const [name, what] of [[hasMain && entry.source, 'The Player source: video, or their player image when the camera is off'], [hasCharacter && entry.characterSource, 'The Character source: character image with the talking and muted images on top']]) {
+    for (const [name, what] of [[entry.source, 'The Player source: video, or their player image when the camera is off'], [entry.characterSource, 'The Character source: character image with the talking and muted images on top']]) {
       if (!name) continue;
       const missing = obsConnected && !inputs.has(name);
       chips.appendChild(makeChip(name, { missing, title: missing ? 'Not in OBS yet; Sync OBS creates it' : what }));
     }
-    if (!hasMain && !hasCharacter) {
+    if (!isOn) {
       const hint = document.createElement('span');
       hint.className = 'hint';
       hint.textContent = 'Not in OBS';
       chips.appendChild(hint);
     }
     const publish = card.querySelector('[data-action="publish"]');
-    publish.textContent = hasMain ? 'Unpublish' : 'Publish';
-    publish.classList.toggle('btn-primary', !hasMain);
-    publish.title = hasMain ? 'Remove this user\'s sources from OBS' : 'Add the Player source (and the Character source if the default says so) to the current OBS scene';
-    const character = card.querySelector('[data-action="character"]');
-    character.textContent = hasCharacter ? 'Remove character' : 'Character';
-    character.classList.toggle('on', hasCharacter);
+    publish.textContent = isOn ? 'Unpublish' : 'Publish';
+    publish.classList.toggle('btn-primary', !isOn);
+    publish.disabled = !isOn && !entry.player && !entry.character;
+    publish.title = isOn ? 'Remove this user\'s sources from OBS' : publish.disabled ? 'Tick Player or Character first' : 'Add the ticked sources to the current OBS scene';
+    if (!isEditing(card)) {
+      card.querySelector('[data-choice="player"]').checked = entry.player;
+      card.querySelector('[data-choice="character"]').checked = entry.character;
+    }
     card.querySelector('[data-action="mute"]').hidden = !(user.online && user.online.micOn);
     card.querySelector('[data-action="kick"]').hidden = !user.online;
   }
@@ -1024,10 +1036,8 @@ async function onPlayerClick(event) {
   const published = config.tavern.players[key];
   try {
     if (button.dataset.action === 'publish') {
-      if (published && published.source) await api.tavernUnpublish(key, true);
+      if (isPublished(published)) await api.tavernUnpublish(key, true);
       else await api.tavernPublish(key);
-    } else if (button.dataset.action === 'character') {
-      await api.tavernCharacter(key, !(published && published.characterSource));
     } else if (button.dataset.action === 'copy-link') {
       const url = await api.tavernViewUrl(key, 'player');
       await navigator.clipboard.writeText(url);
@@ -1043,8 +1053,22 @@ async function onPlayerClick(event) {
   }
 }
 
-async function onPlayerOption() {
-  // per-user options live on the Tavern now
+function isPublished(entry) {
+  return Boolean(entry && (entry.source || entry.characterSource));
+}
+
+// A Player or Character tick: remembered, and applied at once while published.
+async function onPlayerOption(event) {
+  const input = event.target;
+  if (!input.matches('[data-choice]')) return;
+  const key = event.currentTarget.dataset.key;
+  try {
+    const entry = await api.tavernSetChoice(key, input.dataset.choice, input.checked);
+    config.tavern.players[key] = entry;
+    renderTavern();
+  } catch (err) {
+    reportError(err);
+  }
 }
 
 // ---------------------------------------------------------------------------

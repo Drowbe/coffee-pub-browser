@@ -852,8 +852,9 @@ select:focus {
 .player-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 6px 10px;
   flex: none;
 }
 

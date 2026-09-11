@@ -135,7 +135,11 @@ function sanitizeTavern(input) {
         // statusSource was the pre-0.1.9 name of the character source
         characterSource: typeof (value.characterSource ?? value.statusSource) === 'string' ? (value.characterSource ?? value.statusSource).trim().slice(0, 200) : '',
       };
-      if (entry.source || entry.characterSource) players[key] = entry;
+      // The Player and Character ticks; older entries had only the sources.
+      entry.player = value.player === undefined ? true : Boolean(value.player);
+      entry.character = value.character === undefined ? Boolean(entry.characterSource) : Boolean(value.character);
+      const touched = value.player !== undefined || value.character !== undefined;
+      if (entry.source || entry.characterSource || touched) players[key] = entry;
     }
   }
   // width/height/statusWidth/statusHeight/indicator were the pre-0.1.9 names

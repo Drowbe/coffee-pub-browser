@@ -272,39 +272,64 @@ function freeSourceName(user, kind, players) {
   return name;
 }
 
-// Publish a user's Player source (and the Character source too when the
-// default says so).
-async function publishPlayer(key) {
+// A user's entry: which sources they get (the Player and Character ticks)
+// and the OBS source names while published. Untouched users default to
+// Player on and Character per the Session tab setting.
+function playerEntry(tavernConfig, key) {
+  const entry = tavernConfig.players[key];
+  return {
+    player: entry && entry.player !== undefined ? entry.player : true,
+    character: entry && entry.character !== undefined ? entry.character : tavernConfig.characterWithPlayer,
+    source: (entry && entry.source) || '',
+    characterSource: (entry && entry.characterSource) || '',
+  };
+}
+
+function isPublished(entry) {
+  return Boolean(entry && (entry.source || entry.characterSource));
+}
+
+// Make a user's OBS sources match `wanted` ({ player, character }): create
+// the ticked ones, remove the others, then sync.
+async function applyPublish(key, wanted) {
   const user = tavern.party.find((u) => u.key === key);
   if (!user) throw new Error('That user is not on the Tavern any more.');
   const current = configStore.get();
   const players = { ...current.tavern.players };
-  const entry = { source: '', characterSource: '', ...(players[key] || {}) };
-  if (!entry.source) entry.source = freeSourceName(user, 'player', players);
-  if (!entry.characterSource && current.tavern.characterWithPlayer) entry.characterSource = freeSourceName(user, 'character', players);
+  const entry = { ...playerEntry(current.tavern, key), ...wanted };
+  if (entry.player && !entry.source) entry.source = freeSourceName(user, 'player', players);
+  if (!entry.player && entry.source) {
+    await removeObsInput(entry.source);
+    entry.source = '';
+  }
+  if (entry.character && !entry.characterSource) entry.characterSource = freeSourceName(user, 'character', players);
+  if (!entry.character && entry.characterSource) {
+    await removeObsInput(entry.characterSource);
+    entry.characterSource = '';
+  }
   players[key] = entry;
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
   await syncTavern();
   return players[key];
 }
 
-// Turn a user's Character source on or off.
-async function setCharacter(key, on) {
-  const user = tavern.party.find((u) => u.key === key);
-  if (!user) throw new Error('That user is not on the Tavern any more.');
+// Publish: the sources a user has ticked.
+async function publishPlayer(key) {
+  const entry = playerEntry(configStore.get().tavern, key);
+  if (!entry.player && !entry.character) throw new Error('Tick Player or Character first.');
+  return applyPublish(key, { player: entry.player, character: entry.character });
+}
+
+// A tick changed: remembered always, applied at once when they are published.
+async function setChoice(key, field, on) {
+  if (field !== 'player' && field !== 'character') throw new Error('Unknown option.');
   const current = configStore.get();
-  const players = { ...current.tavern.players };
-  const entry = { source: '', characterSource: '', ...(players[key] || {}) };
-  if (on && !entry.characterSource) entry.characterSource = freeSourceName(user, 'character', players);
-  if (!on && entry.characterSource) {
-    await removeObsInput(entry.characterSource);
-    entry.characterSource = '';
-  }
-  if (entry.source || entry.characterSource) players[key] = entry;
-  else delete players[key];
+  const entry = playerEntry(current.tavern, key);
+  if (isPublished(entry)) return applyPublish(key, { [field]: on });
+  const players = { ...current.tavern.players, [key]: { ...entry, [field]: on } };
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
-  await syncTavern();
-  return players[key] || null;
+  broadcastStatus();
+  return players[key];
 }
 
 async function removeObsInput(name) {
@@ -313,12 +338,13 @@ async function removeObsInput(name) {
   if (inputs.some((i) => i.name === name)) await obs.removeInput(name);
 }
 
+// Unpublish: remove the sources; the ticks stay as they were.
 async function unpublishPlayer(key, removeFromObs = true) {
   const current = configStore.get();
   const players = { ...current.tavern.players };
   const entry = players[key];
   if (!entry) return;
-  delete players[key];
+  players[key] = { ...entry, source: '', characterSource: '' };
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
   if (removeFromObs) {
     await removeObsInput(entry.source);
@@ -1432,9 +1458,9 @@ function registerIpc() {
   ipcMain.handle('tavern:publish', (_event, key) => publishPlayer(String(key)));
   ipcMain.handle('tavern:unpublish', (_event, key, removeFromObs) => unpublishPlayer(String(key), removeFromObs !== false));
   ipcMain.handle('tavern:publishAll', async () => {
-    const published = configStore.get().tavern.players;
     for (const user of tavern.party) {
-      if (!published[user.key]) await publishPlayer(user.key);
+      const entry = playerEntry(configStore.get().tavern, user.key);
+      if (!isPublished(entry) && (entry.player || entry.character)) await publishPlayer(user.key);
     }
     return fullStatus().tavern;
   });
@@ -1442,7 +1468,7 @@ function registerIpc() {
     for (const key of Object.keys(configStore.get().tavern.players)) await unpublishPlayer(key, removeFromObs !== false);
     return fullStatus().tavern;
   });
-  ipcMain.handle('tavern:character', (_event, key, on) => setCharacter(String(key), Boolean(on)));
+  ipcMain.handle('tavern:setChoice', (_event, key, field, on) => setChoice(String(key), String(field), Boolean(on)));
   ipcMain.handle('tavern:viewUrl', (_event, key, kind) => {
     const user = tavern.party.find((u) => u.key === key);
     if (!user) throw new Error('Unknown user.');

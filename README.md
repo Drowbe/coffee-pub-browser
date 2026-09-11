@@ -221,20 +221,26 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    keeping them at 16:9. Audio is always included; the source's own **Control audio via OBS** in OBS decides whether
    it reaches the mixer. The **Character source** is the character image with the talking and
    muted images on top, transparent until they talk or mute when there is no character image,
-   made for overlaying a character bar. Set its size, and tick **Publish the character with
-   each player** to create both sources whenever you publish someone.
+   made for overlaying a character bar. Set its size; **Ticked by default for each user**
+   decides whether the Character box starts ticked on the cards.
 3. Open the **Tavern** tab. Every account on the server is listed with a green dot while they are
-   at the table and their microphone and camera state. Click **Publish** on a user and a Browser
-   Source named `Tavern - <name>` appears in the current OBS scene. **Character** adds
-   `Tavern - <name> (character)` next to it. **Publish all** does everyone at once. What the
-   sources show, the images, the border colour and the badge, is all set on the Tavern's manage
-   page; **Manage party** opens it.
+   at the table and their microphone and camera state. Each card has a **Publish** button and
+   two ticks, **Player** and **Character**, for the sources that user gets. Click **Publish**
+   and the ticked sources appear in the current OBS scene: `Tavern - <name>` for the Player
+   and `Tavern - <name> (character)` for the Character. Changing a tick while they are
+   published adds or removes that source at once. **Publish all** publishes everyone who is
+   not in OBS yet, with their ticks. What the sources show, the images, the border colour,
+   the badge and the name plate, is all set on the Tavern's manage page; **Manage party**
+   opens it.
 4. The app keeps the sources in sync: renaming a user on the Tavern renames both OBS sources,
    changing a size updates every source, and sources missing from OBS are created again on
    **Sync OBS** or whenever OBS connects. Users are tracked by the Tavern's stable key, so
    renames never break the link.
 
-**Unpublish** removes both of a user's sources from OBS. **Copy link** puts the Player view link
+**Unpublish** removes a user's sources from OBS and keeps their ticks. **Sync OBS** makes OBS
+match the published users again: it creates any source that is missing, re-points every
+source at its link and size, and follows renames; the app also does this whenever OBS
+connects or the Tavern reports a change. **Copy link** puts the Player view link
 on the clipboard for a source you manage yourself. **Mute** and **Kick** act on a player at the table.
 **Manage party** opens the Tavern's manage page in your browser for passwords, links and images.
 
@@ -324,7 +330,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ source, characterSource }`. The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

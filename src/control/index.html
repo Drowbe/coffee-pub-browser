@@ -183,7 +183,7 @@
             <span>Height</span>
             <input id="tavern-status-height" type="number" min="32" max="2160" step="1" size="5">
           </label>
-          <label class="check" title="Create the Character source alongside the Player source whenever you publish someone"><input id="tavern-indicator" type="checkbox"><span>Publish the character with each player</span></label>
+          <label class="check" title="Whether the Character box starts ticked on each user's card"><input id="tavern-indicator" type="checkbox"><span>Ticked by default for each user</span></label>
         </div>
         <p class="hint">A second source: the character image with the talking and muted images on top, set on the Tavern. With no character image it stays transparent until they talk or mute, so it can sit over a character bar.</p>
         <p class="hint" id="tavern-status">Not signed in.</p>
@@ -199,7 +199,7 @@
             <span class="hint" id="tavern-summary"></span>
           </div>
           <div class="view-actions">
-            <button id="tavern-publish-all" class="btn btn-primary" type="button" title="A Browser Source in OBS for everyone who has none yet">Publish all</button>
+            <button id="tavern-publish-all" class="btn btn-primary" type="button" title="Publish everyone who is not in OBS yet, with the sources they have ticked">Publish all</button>
             <button id="tavern-unpublish-all" class="btn" type="button" title="Remove every Tavern source from OBS">Unpublish all</button>
             <button id="tavern-sync" class="btn" type="button" title="Make OBS match: create, re-point and rename the Tavern sources">Sync OBS</button>
           </div>
@@ -323,7 +323,8 @@
       </div>
       <div class="player-actions">
         <button class="btn btn-small btn-primary" data-action="publish" type="button">Publish</button>
-        <button class="btn btn-small" data-action="character" type="button" title="The Character source: their character image with the talking and muted images on top">Character</button>
+        <label class="check" title="The Player source: their video, or their player image when the camera is off"><input type="checkbox" data-choice="player"><span>Player</span></label>
+        <label class="check" title="The Character source: their character image with the talking and muted images on top"><input type="checkbox" data-choice="character"><span>Character</span></label>
         <button class="btn btn-small" data-action="copy-link" type="button" title="Copy the Player view link">Copy link</button>
         <button class="btn btn-small" data-action="mute" type="button" title="Mute their microphone at the table" hidden>Mute</button>
         <button class="btn btn-small btn-danger" data-action="kick" type="button" title="Disconnect them from the table" hidden>Kick</button>
