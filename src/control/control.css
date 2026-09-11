@@ -832,8 +832,8 @@ select:focus {
 }
 
 .room-image {
-  width: 120px;
-  height: 68px;
+  width: 96px;
+  height: 96px;
   border-radius: 6px;
   object-fit: cover;
   background: var(--bg-input);
