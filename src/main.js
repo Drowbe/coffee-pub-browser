@@ -528,9 +528,16 @@ async function refreshRegions(view) {
   return regions;
 }
 
+// The OBS source names a window maintains: the whole-window source while it
+// is switched on. Regions carry their own.
+function windowSources(view) {
+  return view.windowSource.enabled && view.windowSource.name ? [view.windowSource.name] : [];
+}
+
 // Point every linked OBS source at the current windows and keep region
-// crops current. Newly detected links are saved so they are re-pointed
-// automatically from then on.
+// crops current. An OBS source found capturing a window whose own source is
+// missing is adopted as that source, so a capture made by hand in OBS is
+// re-pointed automatically from then on.
 let obsSyncTimer = null;
 // Views whose windows appeared since the last sync: their captures get restarted.
 const freshlyShown = new Set();
@@ -546,18 +553,24 @@ async function syncObs() {
       id: view.id,
       title: windowTitle(view),
       windowId: systemWindowId(win),
-      sources: view.obsSources,
+      sources: windowSources(view),
+      allRegionSources: view.regions.map((r) => r.obsSource).filter(Boolean),
       crop: barCrop(win),
       regions: regions.filter((r) => r.enabled).map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
     });
   }
   const report = await obs.syncViews(views, force);
+  const known = new Set(obs.status().inputs);
+  let adopted = false;
   for (const { id, input } of report.detected) {
     const view = configStore.getView(id);
-    if (view && !view.obsSources.includes(input)) {
-      configStore.updateView(id, { obsSources: [...view.obsSources, input] });
-    }
+    if (!view || !view.windowSource.enabled || known.has(view.windowSource.name)) continue;
+    configStore.updateView(id, { windowSource: { ...view.windowSource, name: input } });
+    adopted = true;
   }
+  // A second pass points and crops what was just adopted; it adopts nothing
+  // more since the names are known now.
+  if (adopted) return syncObs();
   broadcastStatus();
   return report;
 }
@@ -941,7 +954,7 @@ function dockState() {
         width,
         height,
         edge,
-        sources: view.obsSources,
+        sources: windowSources(view),
       };
     }),
   };
@@ -1023,7 +1036,7 @@ function setupDock() {
 }
 
 // Start every window that has a URL. The per-window "start on launch" flag
-// only applies to app launch (see openOnLaunch below).
+// only applies to app launch (see openLaunchViews below).
 function openAllViews() {
   configStore
     .get()
@@ -1262,7 +1275,17 @@ function setupTray() {
 function registerIpc() {
   ipcMain.handle('config:get', () => configStore.get());
   ipcMain.handle('config:save', (_event, next) => {
-    const saved = configStore.save(next);
+    // The window source has its own channel (windowSource:set) that also
+    // renames the source in OBS; a stale copy from the panel must not undo that.
+    const current = configStore.get();
+    const input = next && typeof next === 'object' ? next : {};
+    const views = Array.isArray(input.views)
+      ? input.views.map((v) => {
+          const stored = v && typeof v === 'object' ? current.views.find((c) => c.id === v.id) : null;
+          return stored ? { ...v, windowSource: stored.windowSource } : v;
+        })
+      : input.views;
+    const saved = configStore.save({ ...input, views });
     saved.views.forEach(applyViewSettings);
     setupTray();
     setupDock();
@@ -1328,28 +1351,51 @@ function registerIpc() {
     return fullStatus().obs;
   });
   ipcMain.handle('obs:sync', () => syncObs());
-  ipcMain.handle('obs:createSource', async (_event, id) => {
+  // --- The whole window as an OBS source ---
+  // Saves the switch and the name. Switching off hides the source in OBS
+  // and stops maintaining it; renaming while the source exists in OBS renames
+  // it there too, so the capture and its crop filter carry over.
+  ipcMain.handle('windowSource:set', async (_event, id, patch) => {
     const view = getView(id);
-    const windowId = systemWindowId(viewWindows.get(id));
+    const src = patch && typeof patch === 'object' ? patch : {};
+    const previous = view.windowSource;
+    const next = {
+      enabled: src.enabled === undefined ? previous.enabled : Boolean(src.enabled),
+      name: typeof src.name === 'string' && src.name.trim() ? src.name.trim().slice(0, 200) : previous.name,
+    };
+    const inOtherUse = configStore
+      .get()
+      .views.some((v) => (v.id !== id && v.windowSource.name === next.name) || v.regions.some((r) => r.obsSource === next.name));
+    if (next.name !== previous.name && inOtherUse) throw new Error(`"${next.name}" is already used by another window or region.`);
+    const saved = configStore.updateView(id, { windowSource: next }).views.find((v) => v.id === id).windowSource;
+    if (obs.connected) {
+      const inputs = obs.status().inputs;
+      if (saved.name !== previous.name && inputs.includes(previous.name) && !inputs.includes(saved.name)) {
+        await obs.renameInput(previous.name, saved.name).catch((err) => console.warn(`[obs] rename: ${err.message}`));
+        await obs.refreshInputs().catch(() => {});
+      }
+      if (saved.enabled !== previous.enabled && obs.status().inputs.includes(saved.name)) {
+        await obs.setSourceVisible(saved.name, saved.enabled).catch((err) => console.warn(`[obs] visibility: ${err.message}`));
+      }
+    }
+    scheduleObsSync();
+    broadcastStatus();
+    return saved;
+  });
+  // Creates the window's source in OBS under its name. A source that already
+  // exists with that name (made by hand in OBS) is simply taken over.
+  ipcMain.handle('windowSource:add', async (_event, id) => {
+    const view = getView(id);
+    const { name } = view.windowSource;
+    const win = viewWindows.get(id);
+    const windowId = systemWindowId(win);
     if (!windowId) throw new Error('Start the window first so OBS can capture it.');
-    let name = `Coffee Pub - ${view.label}`;
-    const taken = new Set(obs.status().inputs);
-    let n = 2;
-    while (taken.has(name)) name = `Coffee Pub - ${view.label} ${n++}`;
-    await obs.createInput(name, windowId);
-    await obs.ensureCropFilter(name, barCrop(viewWindows.get(id)));
-    configStore.updateView(id, { obsSources: [...view.obsSources, name] });
+    if (!obs.status().inputs.includes(name)) await obs.createInput(name, windowId);
+    await obs.ensureCropFilter(name, barCrop(win));
+    if (!view.windowSource.enabled) configStore.updateView(id, { windowSource: { ...view.windowSource, enabled: true } });
+    scheduleObsSync();
     broadcastStatus();
     return name;
-  });
-  ipcMain.handle('obs:linkSource', async (_event, id, inputName) => {
-    const view = getView(id);
-    if (typeof inputName !== 'string' || !inputName) return;
-    if (!view.obsSources.includes(inputName)) {
-      configStore.updateView(id, { obsSources: [...view.obsSources, inputName] });
-    }
-    await syncObs().catch(() => {});
-    broadcastStatus();
   });
   // --- Tavern ---
   ipcMain.handle('tavern:setSettings', async (_event, settings) => {
@@ -1441,30 +1487,14 @@ function registerIpc() {
     broadcastStatus();
     return saved;
   });
-  ipcMain.handle('obs:recreateSource', async (_event, id, inputName) => {
-    const view = getView(id);
-    const windowId = systemWindowId(viewWindows.get(id));
-    if (!windowId) throw new Error('Start the window first so OBS can capture it.');
-    if (typeof inputName !== 'string' || !inputName) throw new Error('No source name.');
-    if (obs.status().inputs.includes(inputName)) throw new Error(`"${inputName}" already exists in OBS.`);
-    await obs.createInput(inputName, windowId);
-    await obs.ensureCropFilter(inputName, barCrop(viewWindows.get(id)));
-    if (!view.obsSources.includes(inputName)) {
-      configStore.updateView(id, { obsSources: [...view.obsSources, inputName] });
-    }
-    broadcastStatus();
-    return inputName;
-  });
+  // Deletes a source from OBS. A region forgets the name so the next Add
+  // picks a fresh one; a window keeps its name so Add to OBS re-creates it.
   ipcMain.handle('obs:removeSource', async (_event, inputName) => {
     if (typeof inputName !== 'string' || !inputName) return;
     if (obs.status().inputs.includes(inputName)) await obs.removeInput(inputName);
-    // Forget it everywhere.
     for (const view of configStore.get().views) {
-      const obsSources = view.obsSources.filter((n) => n !== inputName);
       const regions = view.regions.map((r) => (r.obsSource === inputName ? { ...r, obsSource: '' } : r));
-      if (obsSources.length !== view.obsSources.length || regions.some((r, i) => r !== view.regions[i])) {
-        configStore.updateView(view.id, { obsSources, regions });
-      }
+      if (regions.some((r, i) => r !== view.regions[i])) configStore.updateView(view.id, { regions });
     }
     broadcastStatus();
   });
@@ -1493,11 +1523,6 @@ function registerIpc() {
     configStore.saveRegion(id, { ...region, obsSource: name });
     broadcastStatus();
     return name;
-  });
-  ipcMain.handle('obs:unlinkSource', (_event, id, inputName) => {
-    const view = getView(id);
-    configStore.updateView(id, { obsSources: view.obsSources.filter((n) => n !== inputName) });
-    broadcastStatus();
   });
 
   ipcMain.on('bar:resize', (event, dw, dh) => {
@@ -1611,7 +1636,7 @@ if (!app.requestSingleInstanceLock()) {
     setupTray();
     setupDock();
     createControlWindow();
-    if (configStore.get().openOnLaunch) openLaunchViews();
+    openLaunchViews();
     obs.start().catch(() => {});
     tavern.start().catch(() => {});
 

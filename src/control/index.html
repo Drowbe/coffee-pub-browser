@@ -61,10 +61,6 @@
         </div>
         <div class="row checks-column">
           <label class="check">
-            <input id="open-on-launch" type="checkbox">
-            <span>Start the windows when the app launches</span>
-          </label>
-          <label class="check">
             <input id="menu-bar-icon" type="checkbox">
             <span>Show a menu bar icon with Start, Stop, Park and Sync shortcuts</span>
           </label>
@@ -278,21 +274,25 @@
           <span class="details-key">Window bar</span>
           <span class="details-value hint" data-status="crop">-</span>
         </div>
-        <div class="details-row">
-          <span class="details-key">OBS sources</span>
-          <span class="details-value sources">
-            <span class="chips" data-role="chips"></span>
-            <select data-role="link-select" class="link-select">
-              <option value="">Link existing source...</option>
-            </select>
-            <button class="btn btn-small" data-action="create-source" type="button">Create in OBS</button>
-          </span>
-        </div>
       </div>
 
       <div class="row card-footer">
-        <span class="hint">Removing a window forgets its OBS links; the sources stay in OBS.</span>
+        <span class="hint">Removing a window forgets its OBS sources; the sources stay in OBS.</span>
         <button class="btn btn-danger" data-action="remove-view" type="button">Remove window</button>
+      </div>
+    </article>
+
+    <article class="card region-card window-source-card" data-role="window-source">
+      <header class="region-head">
+        <label class="check" title="Off: the source is hidden in OBS and no longer maintained">
+          <input type="checkbox" data-wfield="enabled">
+        </label>
+        <span class="field-label window-source-label">Whole window</span>
+        <input class="region-name-input" data-wfield="name" type="text" maxlength="200" list="obs-window-inputs" spellcheck="false" placeholder="OBS source name">
+        <span class="region-obs" data-role="window-obs"></span>
+      </header>
+      <div class="region-body">
+        <span class="hint">The entire page as one OBS source, with the window bar cropped off. Pick any name; an existing OBS source with that name is taken over. Turn it off for a window you only use through regions.</span>
       </div>
     </article>
 
@@ -306,6 +306,7 @@
   </template>
 
   <datalist id="session-groups"></datalist>
+  <datalist id="obs-window-inputs"></datalist>
 
   <template id="player-template">
     <article class="player-card">

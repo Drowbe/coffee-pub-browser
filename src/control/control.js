@@ -7,7 +7,6 @@ const viewsEl = $('views');
 const viewTabsEl = $('view-tabs');
 const template = $('view-template');
 const saveStateEl = $('save-state');
-const openOnLaunchEl = $('open-on-launch');
 const menuBarIconEl = $('menu-bar-icon');
 const hideDockIconEl = $('hide-dock-icon');
 const arrangeDisplayEl = $('arrange-display');
@@ -138,7 +137,9 @@ function renderViewCards() {
     card.addEventListener('input', onFieldInput);
     card.addEventListener('change', onFieldInput);
     card.addEventListener('click', onCardClick);
-    card.querySelector('[data-role="link-select"]').addEventListener('change', onLinkSelect);
+    const wsCard = card.querySelector('[data-role="window-source"]');
+    wsCard.addEventListener('input', onWindowSourceInput);
+    wsCard.addEventListener('change', onWindowSourceInput);
     viewsEl.appendChild(card);
   }
   renderLabelWarnings();
@@ -165,7 +166,6 @@ function applyConfig(next) {
     config.views.length === next.views.length &&
     config.views.every((v, i) => v.id === next.views[i].id && v.label === next.views[i].label);
   config = next;
-  openOnLaunchEl.checked = config.openOnLaunch;
   menuBarIconEl.checked = config.menuBarIcon;
   dockEnabledEl.checked = config.dock.enabled;
   dockSideEl.value = config.dock.side;
@@ -309,8 +309,23 @@ function renderStatus() {
       ? `The window has a ${s.barHeight} pt bar above the page. Linked OBS sources get a crop of ${s.cropTop} px at the top automatically; for a source you manage yourself, crop the top by ${s.cropTop} px in OBS.`
       : 'Each window has a bar above the page that the app crops out of linked OBS sources.';
 
-    renderSources(card, view, s, o, connected);
+    renderWindowSource(card, view, s, o, connected);
     renderRegions(card, view, s, o, connected);
+  }
+  renderSourceChoices(o, connected);
+}
+
+// Existing OBS window captures nobody owns yet, offered while typing a name.
+function renderSourceChoices(o, connected) {
+  const list = $('obs-window-inputs');
+  list.textContent = '';
+  if (!connected) return;
+  const owned = new Set(config.views.flatMap((v) => [v.windowSource.name, ...v.regions.map((r) => r.obsSource)]));
+  for (const name of o.inputs) {
+    if (owned.has(name)) continue;
+    const option = document.createElement('option');
+    option.value = name;
+    list.appendChild(option);
   }
 }
 
@@ -335,56 +350,83 @@ function makeSmallButton(text, action, { danger = false, disabled = false, title
   return button;
 }
 
-// Window-level OBS sources: exists -> chip with forget; missing -> Add to OBS.
-function renderSources(card, view, s, o, connected) {
-  const chips = card.querySelector('[data-role="chips"]');
-  chips.textContent = '';
-  for (const name of view.obsSources) {
-    const exists = !connected || o.inputs.includes(name);
-    const chip = makeChip(name, { missing: connected && !exists, dim: !connected, title: connected && !exists ? 'Not found in OBS' : '' });
-    if (connected && !exists) {
-      const add = makeSmallButton('Add to OBS', 'recreate-source', {
-        disabled: !s.open,
-        title: s.open ? 'Re-create this source in OBS with the same name' : 'Start the window first',
-      });
-      add.dataset.source = name;
-      chip.appendChild(add);
+// The whole window as one OBS source: a switch, its name, and its state in
+// OBS (in OBS -> Remove from OBS; not there -> Add to OBS).
+function renderWindowSource(card, view, s, o, connected) {
+  const el = card.querySelector('[data-role="window-source"]');
+  const ws = view.windowSource;
+  if (!isEditing(el)) {
+    el.querySelector('[data-wfield="enabled"]').checked = ws.enabled;
+    el.querySelector('[data-wfield="name"]').value = ws.name;
+  }
+  el.classList.toggle('disabled', !ws.enabled);
+  const obsEl = el.querySelector('[data-role="window-obs"]');
+  obsEl.textContent = '';
+  if (connected) {
+    const exists = o.inputs.includes(ws.name);
+    if (exists) {
+      obsEl.appendChild(makeChip(ws.enabled ? 'in OBS' : 'in OBS, hidden', { title: ws.enabled ? 'Kept pointed at this window' : 'Hidden while the switch is off' }));
+      obsEl.appendChild(makeSmallButton('Remove from OBS', 'remove-window-source', { danger: true, title: 'Delete this source in OBS' }));
+    } else if (ws.enabled) {
+      obsEl.appendChild(makeChip('not in OBS', { missing: true, title: 'No OBS source has this name yet' }));
+      obsEl.appendChild(
+        makeSmallButton('Add to OBS', 'add-window-source', {
+          disabled: !s.open,
+          title: s.open ? 'Create a window-capture source with this name in the current scene' : 'Start the window first',
+        }),
+      );
+    } else {
+      obsEl.appendChild(makeChip('off', { dim: true, title: 'Turn the switch on to add it to OBS' }));
     }
-    const forget = document.createElement('button');
-    forget.type = 'button';
-    forget.textContent = '×';
-    forget.title = 'Forget this link (keeps the source in OBS)';
-    forget.dataset.unlink = name;
-    chip.appendChild(forget);
-    chips.appendChild(chip);
+  } else {
+    const label = document.createElement('span');
+    label.className = 'hint';
+    label.textContent = ws.enabled ? 'connect to OBS to add the source' : 'off';
+    obsEl.appendChild(label);
   }
-  if (!view.obsSources.length) {
-    const none = document.createElement('span');
-    none.className = 'hint';
-    none.textContent = connected ? 'none linked' : 'connect to OBS to link sources';
-    chips.appendChild(none);
-  }
-  const select = card.querySelector('[data-role="link-select"]');
-  if (!isEditing(select)) {
-    select.textContent = '';
-    const first = document.createElement('option');
-    first.value = '';
-    first.textContent = 'Link existing source...';
-    select.appendChild(first);
-    const linked = new Set(config.views.flatMap((v) => [...v.obsSources, ...v.regions.map((r) => r.obsSource)]));
-    for (const name of o.inputs) {
-      if (linked.has(name)) continue;
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      select.appendChild(option);
+}
+
+const windowSourceTimers = new Map();
+
+async function onWindowSourceInput(event) {
+  if (!event.target.matches('[data-wfield]')) return;
+  const el = event.currentTarget;
+  const viewId = el.closest('.view-tab').dataset.viewId;
+  const view = config.views.find((v) => v.id === viewId);
+  if (!view) return;
+  const field = event.target.dataset.wfield;
+  if (field === 'enabled') {
+    if (event.type !== 'change') return;
+    view.windowSource.enabled = event.target.checked;
+    el.classList.toggle('disabled', !event.target.checked);
+    try {
+      view.windowSource = await api.setWindowSource(viewId, { enabled: event.target.checked });
+    } catch (err) {
+      reportError(err);
     }
-    select.hidden = !connected || select.options.length === 1;
+    return;
   }
-  const create = card.querySelector('[data-action="create-source"]');
-  create.hidden = !connected;
-  create.disabled = !s.open;
-  create.title = s.open ? '' : 'Start the window first';
+  // The name saves shortly after typing stops, or as soon as the field is left.
+  clearTimeout(windowSourceTimers.get(viewId));
+  windowSourceTimers.set(viewId, setTimeout(() => commitWindowSourceName(viewId), 500));
+}
+
+// Saves the typed name; an empty name keeps the old one.
+async function commitWindowSourceName(viewId) {
+  clearTimeout(windowSourceTimers.get(viewId));
+  windowSourceTimers.delete(viewId);
+  const card = cards.get(viewId);
+  const view = config.views.find((v) => v.id === viewId);
+  if (!card || !view) return;
+  const input = card.querySelector('[data-wfield="name"]');
+  const name = input.value.trim();
+  if (!name || name === view.windowSource.name) return;
+  try {
+    view.windowSource = await api.setWindowSource(viewId, { name });
+  } catch (err) {
+    reportError(err);
+    input.value = view.windowSource.name;
+  }
 }
 
 const REGION_NUMBER_FIELDS = new Set(['x', 'y', 'width', 'height']);
@@ -548,18 +590,14 @@ function onFieldInput(event) {
 async function onCardClick(event) {
   const id = event.currentTarget.dataset.viewId;
   const view = config.views.find((v) => v.id === id);
-  const unlink = event.target.closest('[data-unlink]');
-  if (unlink) {
-    await api.obsUnlinkSource(id, unlink.dataset.unlink);
-    return;
-  }
   const button = event.target.closest('[data-action]');
   if (!button) return;
-  if (event.target.matches('[data-rfield]')) return; // region inputs are handled by onRegionInput
+  if (event.target.matches('[data-rfield], [data-wfield]')) return; // handled by onRegionInput / onWindowSourceInput
   const regionEl = event.target.closest('[data-region]');
   const regionId = regionEl ? regionEl.dataset.region : null;
   const region = regionId ? view.regions.find((r) => r.id === regionId) : null;
   await flushSave();
+  await commitWindowSourceName(id);
   const s = status.views.find((v) => v.id === id) || { open: false };
   try {
     switch (button.dataset.action) {
@@ -576,11 +614,13 @@ async function onCardClick(event) {
       case 'devtools':
         await api.devToolsView(id);
         break;
-      case 'create-source':
-        await api.obsCreateSource(id);
+      case 'add-window-source':
+        await api.addWindowSource(id);
         break;
-      case 'recreate-source':
-        await api.obsRecreateSource(id, button.dataset.source);
+      case 'remove-window-source':
+        if (window.confirm(`Delete "${view.windowSource.name}" from OBS?`)) {
+          await api.obsRemoveSource(view.windowSource.name);
+        }
         break;
       case 'remove-view':
         if (window.confirm(`Remove the "${view.label}" window and its settings?`)) {
@@ -643,16 +683,6 @@ async function onCardClick(event) {
   }
 }
 
-async function onLinkSelect(event) {
-  const select = event.currentTarget;
-  const name = select.value;
-  if (!name) return;
-  const id = select.closest('.view-tab').dataset.viewId;
-  select.value = '';
-  select.blur();
-  await api.obsLinkSource(id, name);
-}
-
 function scheduleSave() {
   setSaveState('Unsaved changes...', 'dirty');
   clearTimeout(saveTimer);
@@ -664,7 +694,6 @@ async function flushSave() {
   saveTimer = null;
   if (!isDirty()) return;
   try {
-    config.openOnLaunch = openOnLaunchEl.checked;
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
     config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right', overlap: Number(dockOverlapEl.value) };
@@ -692,7 +721,7 @@ arrangeDisplayEl.addEventListener('change', () => {
   config.arrangeDisplayId = Number(arrangeDisplayEl.value);
   scheduleSave();
 });
-for (const el of [openOnLaunchEl, menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl]) el.addEventListener('change', scheduleSave);
+for (const el of [menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl]) el.addEventListener('change', scheduleSave);
 $('clear-session').addEventListener('click', () => api.clearSession());
 $('reveal-config').addEventListener('click', () => api.revealConfig());
 $('reset-config').addEventListener('click', async () => {
@@ -747,7 +776,12 @@ $('obs-sync').addEventListener('click', async () => {
 
 // Blur commits fields immediately so a shortcut right after typing uses the new value.
 document.addEventListener('focusout', (event) => {
-  if (event.target && event.target.matches('[data-field]') && saveTimer) flushSave();
+  if (!event.target || typeof event.target.matches !== 'function') return;
+  if (event.target.matches('[data-field]') && saveTimer) flushSave();
+  if (event.target.matches('[data-wfield="name"]')) {
+    const tab = event.target.closest('.view-tab');
+    if (tab) commitWindowSourceName(tab.dataset.viewId);
+  }
 });
 
 api.onStatus((next) => {

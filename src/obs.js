@@ -330,7 +330,8 @@ class ObsBridge extends EventEmitter {
    * `force` lists view ids whose windows just appeared: their sources are
    * re-pointed and their captures restarted even when the ID is unchanged.
    *
-   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[], crop: object|null,
+   * @param {Array<{id: string, title: string, windowId: number|null, sources: string[], allRegionSources?: string[],
+   *   crop: object|null,
    *   regions: Array<{name: string, obsSource: string, crop: {left: number, top: number, right: number, bottom: number}}>}>} views
    * @returns {Promise<{pointed: string[], cropped: string[], missing: string[], detected: Array<{id: string, input: string}>}>}
    */
@@ -340,6 +341,8 @@ class ObsBridge extends EventEmitter {
     const choices = await this.windowChoices().catch(() => []);
     const known = new Set(this.inputs.map((i) => i.name));
     const report = { pointed: [], cropped: [], missing: [], detected: [], restarted: [] };
+    // Every name some window or region already owns; those are never "detected".
+    const owned = new Set(views.flatMap((v) => [...v.sources, ...(v.allRegionSources || v.regions.map((r) => r.obsSource))]));
 
     // Prefer the window ID OBS itself reports for our title; fall back to
     // the ID Electron knows.
@@ -351,11 +354,10 @@ class ObsBridge extends EventEmitter {
 
     for (const view of views) {
       const windowId = resolveId(view);
-      // Detect unlinked inputs already pointing at this window.
+      // Detect unowned inputs already pointing at this window.
       for (const input of this.inputs) {
-        if (windowId && input.window === windowId && !view.sources.includes(input.name)) {
-          const takenElsewhere = views.some((v) => v !== view && v.sources.includes(input.name));
-          if (!takenElsewhere) report.detected.push({ id: view.id, input: input.name });
+        if (windowId && input.window === windowId && !owned.has(input.name)) {
+          report.detected.push({ id: view.id, input: input.name });
         }
       }
       const regionSources = view.regions.filter((r) => r.obsSource).map((r) => r.obsSource);

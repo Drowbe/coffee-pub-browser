@@ -89,10 +89,11 @@ xattr -dr com.apple.quarantine "/Applications/Coffee Pub Studio.app"
 
 ## Using it
 
-1. Launch **Coffee Pub Studio**. The control panel opens and, by default, the windows open
-   too. The panel has a **Session** tab (layout, the edge dock, OBS and login), one tab per
-   window with its regions, and a **+** tab that adds a window (up to five). Each window tab
-   has a **Remove window** button.
+1. Launch **Coffee Pub Studio**. The control panel opens and so does every window whose
+   **Start on launch** box is ticked. The panel has a **Session** tab (layout, the edge dock,
+   OBS and login), a **Tavern** tab when Coffee Pub Tavern is enabled, one tab per window with
+   its whole-window source and its regions, and a **+** tab that adds a window (up to five).
+   Each window tab has a **Remove window** button.
 2. In the Game window, log into Foundry as the user you want the recording to follow (a
    dedicated observer user works well). Windows in the same **Session group** share that
    login; give a window a different group name to give it its own cookies, for a different
@@ -157,11 +158,21 @@ re-pick the window. The app fixes this by talking to OBS over its built-in WebSo
    to connect at launch and reconnect whenever the link drops; **Disconnect** pauses that
    until you connect again.
 3. On every connection and every time one of the app's windows starts, the app points each
-   linked OBS source at the window's current ID and keeps a `Coffee Pub Crop` filter on it
-   that removes the app's bar. If an OBS source already captures one of the
-   windows it is linked automatically and listed under **OBS sources** on the window's card.
-   Otherwise link it from the **Link existing source...** dropdown once, or click **Create in
-   OBS** to add a new window-capture source named after the window to the current scene.
+   of its OBS sources at the window's current ID and keeps a `Coffee Pub Crop` filter on it
+   that removes the app's bar.
+
+### The whole window as an OBS source
+
+Under each window's card sits a **Whole window** card: a switch, the OBS source name, and
+the source's state in OBS. Type any name you like (it starts as `Coffee Pub - Game` and so
+on) and click **Add to OBS** to create a window-capture source with that name in the current
+scene. A source that already exists in OBS under that name, or one you made by hand that
+already captures the window, is simply taken over; typing a new name renames it in OBS too.
+**Remove from OBS** deletes the source but keeps the name, so you can add it again later.
+
+Switch the card off for a window you only use through regions, such as the Stream window: the
+source is hidden in OBS and no longer maintained until you switch it back on. On a fresh
+install the Game window's switch is on and the Stream window's is off.
 
 The password is stored encrypted with the macOS keychain, separate from the config file. The
 app and OBS have to run on the same Mac, since OBS can only capture windows on its own machine.
@@ -259,8 +270,6 @@ Settings are stored as JSON at
 ```json
 {
   "version": 10,
-  "openOnLaunch": true,
-  "showGrips": true,
   "obs": { "autoConnect": false, "host": "127.0.0.1", "port": 4455 },
   "views": [
     {
@@ -274,7 +283,7 @@ Settings are stored as JSON at
       "muted": false,
       "enabled": true,
       "session": "Main",
-      "obsSources": ["GAME SCREEN"],
+      "windowSource": { "enabled": true, "name": "Coffee Pub - Game" },
       "regions": []
     },
     {
@@ -288,7 +297,7 @@ Settings are stored as JSON at
       "muted": true,
       "enabled": true,
       "session": "Main",
-      "obsSources": ["CHAT CAPTURE"],
+      "windowSource": { "enabled": false, "name": "Coffee Pub - Stream" },
       "regions": [
         {
           "id": "region1",
@@ -320,10 +329,10 @@ Settings are stored as JSON at
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
 | `x`, `y` | Window position, written by the app when you move the window; `null` lets macOS place it. |
-| `obsSources` | Names of OBS window-capture sources that follow this window. |
+| `windowSource` | The whole window as one OBS source: `enabled` (off hides it in OBS and stops maintenance) and `name`, the OBS source name. Replaces the `obsSources` list of older configs; the first linked name carries over. |
 | `regions` | Named parts of the window. `mode` is `rect` or `selector`; `x`, `y`, `width`, `height` are in window points and are re-measured from `selector` when set; `obsSource` names the cropped OBS source the app maintains; `enabled` false hides it in OBS and stops maintenance. |
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
-| `enabled` | Open this window when the app launches (when `openOnLaunch` is on). |
+| `enabled` | Open this window when the app launches (**Start on launch**). |
 | `session` | Session group name (default `Main`). Windows with the same name share cookies and storage. |
 
 ## Releasing a new version

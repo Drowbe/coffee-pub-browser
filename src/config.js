@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 10;
+const CONFIG_VERSION = 11;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -21,16 +21,23 @@ const LIMITS = {
 
 // Defaults for the first two windows on a fresh install.
 const SEED_VIEWS = [
-  { id: 'game', label: 'Game', url: 'https://game.coffeepub.live/game', width: 1920, height: 1080, muted: false },
-  // Same size as the canvas: regions pick out the chat and any widgets a module adds anywhere on the page.
-  { id: 'stream', label: 'Stream', url: 'https://game.coffeepub.live/stream', width: 1920, height: 1080, muted: true },
+  { id: 'game', label: 'Game', url: 'https://game.coffeepub.live/game', width: 1920, height: 1080, muted: false, wholeWindow: true },
+  // Same size as the canvas: regions pick out the chat and any widgets a module adds anywhere
+  // on the page, so the whole window is not a source by default.
+  { id: 'stream', label: 'Stream', url: 'https://game.coffeepub.live/stream', width: 1920, height: 1080, muted: true, wholeWindow: false },
 ];
+
+// The OBS source name a window gets unless the user picks another.
+function defaultSourceName(label) {
+  return `Coffee Pub - ${label}`;
+}
 
 function defaultView(index) {
   const seed = SEED_VIEWS[index];
+  const label = seed ? seed.label : `Window ${index + 1}`;
   return {
     id: seed ? seed.id : `window${index + 1}`,
-    label: seed ? seed.label : `Window ${index + 1}`,
+    label,
     url: seed ? seed.url : '',
     width: seed ? seed.width : 1280,
     height: seed ? seed.height : 720,
@@ -39,7 +46,7 @@ function defaultView(index) {
     muted: seed ? seed.muted : true,
     enabled: true,
     session: DEFAULT_GROUP,
-    obsSources: [],
+    windowSource: { enabled: seed ? seed.wholeWindow : true, name: defaultSourceName(label) },
     regions: [],
   };
 }
@@ -163,7 +170,6 @@ function defaultConfig() {
   return {
     version: CONFIG_VERSION,
     panel: null,
-    openOnLaunch: true,
     menuBarIcon: true,
     hideDockIcon: false,
     arrangeDisplayId: null,
@@ -206,9 +212,10 @@ function sanitizeView(input, index) {
   const src = input && typeof input === 'object' ? input : {};
   const x = src.x === null || src.x === undefined || src.x === '' ? null : toInt(src.x, null);
   const y = src.y === null || src.y === undefined || src.y === '' ? null : toInt(src.y, null);
+  const label = typeof src.label === 'string' && src.label.trim() ? src.label.trim().slice(0, 40) : fallback.label;
   return {
     id: sanitizeId(src.id, fallback.id),
-    label: typeof src.label === 'string' && src.label.trim() ? src.label.trim().slice(0, 40) : fallback.label,
+    label,
     url: src.url === undefined ? fallback.url : sanitizeUrl(src.url),
     width: clamp(toInt(src.width, fallback.width), LIMITS.minSize, LIMITS.maxSize),
     height: clamp(toInt(src.height, fallback.height), LIMITS.minSize, LIMITS.maxSize),
@@ -217,24 +224,25 @@ function sanitizeView(input, index) {
     muted: src.muted === undefined ? fallback.muted : Boolean(src.muted),
     enabled: src.enabled === undefined ? fallback.enabled : Boolean(src.enabled),
     session: sanitizeSession(src.session, { label: typeof src.label === 'string' ? src.label.trim() : '', id: fallback.id }),
-    obsSources: sanitizeSources(src.obsSources),
+    windowSource: sanitizeWindowSource(src, label, fallback),
     regions: sanitizeRegions(src.regions),
   };
 }
 
-// Names of OBS inputs that should follow this window.
-function sanitizeSources(value) {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set();
-  const out = [];
-  for (const v of value) {
-    if (typeof v !== 'string') continue;
-    const name = v.trim().slice(0, 200);
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
-  }
-  return out;
+// The whole window as one OBS source: an on/off switch and the source name.
+// Configs before version 11 kept a list of linked source names in
+// `obsSources`; the first one becomes the name, and the switch is on only
+// when something was linked.
+function sanitizeWindowSource(src, label, fallback) {
+  const legacy = Array.isArray(src.obsSources) ? src.obsSources.filter((n) => typeof n === 'string' && n.trim()) : [];
+  const ws = src.windowSource && typeof src.windowSource === 'object' ? src.windowSource : null;
+  let enabled;
+  if (ws) enabled = ws.enabled === undefined ? true : Boolean(ws.enabled);
+  else if (Array.isArray(src.obsSources)) enabled = legacy.length > 0;
+  else enabled = fallback.windowSource.enabled;
+  const raw = ws && typeof ws.name === 'string' ? ws.name : legacy[0] || '';
+  const name = raw.trim().slice(0, 200) || defaultSourceName(label);
+  return { enabled, name };
 }
 
 function sanitizeObs(input) {
@@ -269,7 +277,6 @@ function sanitizeConfig(input) {
 
   return {
     version: CONFIG_VERSION,
-    openOnLaunch: src.openOnLaunch === undefined ? defaults.openOnLaunch : Boolean(src.openOnLaunch),
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
@@ -380,4 +387,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP };
+module.exports = { ConfigStore, defaultConfig, sanitizeConfig, defaultSourceName, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP };

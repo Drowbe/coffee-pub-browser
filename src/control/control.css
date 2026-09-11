@@ -409,11 +409,6 @@ select:focus {
   color: var(--text);
 }
 
-.link-select {
-  padding: 4px 6px;
-  font-size: 12px;
-}
-
 .btn-small {
   padding: 4px 10px;
   font-size: 12px;
@@ -732,6 +727,14 @@ select:focus {
 }
 
 .region-card.disabled .region-body {
+  opacity: 0.55;
+}
+
+.window-source-label {
+  white-space: nowrap;
+}
+
+.region-card.disabled .region-name-input {
   opacity: 0.55;
 }
 
