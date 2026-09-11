@@ -948,14 +948,17 @@ function expandViews() {
 // --- Dock window and cover strips ---
 
 // The dock pill is sized to its contents and centred on the display edge.
+// The dock window always has the expanded size and is click-through while
+// the pill is collapsed; the pill itself grows and shrinks inside it with a
+// CSS transition, so hovering never resizes a window.
 function dockSize(expanded) {
   const n = configStore.get().views.length;
   if (!expanded) return { width: DOCK_WIDTH, height: 92 + n * 16 };
   return { width: DOCK_EXPANDED, height: 200 + n * 182 };
 }
 
-function dockBounds(display, expanded) {
-  return parkingGeometry.pillBounds(configStore.get().dock.side, display.workArea, dockSize(expanded));
+function dockBounds(display) {
+  return parkingGeometry.pillBounds(configStore.get().dock.side, display.workArea, dockSize(true));
 }
 
 function edgeWindowOptions(extra) {
@@ -979,6 +982,7 @@ function edgeWindowOptions(extra) {
 function dockState() {
   return {
     side: configStore.get().dock.side,
+    collapsed: dockSize(false),
     obsConnected: obs.connected,
     outputs: obs.status().outputs,
     windows: configStore.get().views.map((view) => {
@@ -1010,7 +1014,7 @@ function sendDockState() {
 // parks toward, only while something is parked there.
 function layoutDock() {
   if (!isAlive(dockWindow)) return;
-  dockWindow.setBounds(dockBounds(dockDisplay(), dockExpanded), false);
+  dockWindow.setBounds(dockBounds(dockDisplay()), false);
 
   const overlap = configStore.get().dock.overlap;
   const parkedOn = new Set([...parked.values()].map((p) => p.displayId));
@@ -1052,7 +1056,7 @@ function setupDock() {
     dockWindow = new BrowserWindow(
       edgeWindowOptions({
         title: `${APP_NAME} Dock`,
-        ...dockBounds(dockDisplay(), false),
+        ...dockBounds(dockDisplay()),
         webPreferences: {
           preload: path.join(__dirname, 'dock-preload.js'),
           contextIsolation: true,
@@ -1064,6 +1068,9 @@ function setupDock() {
     );
     dockWindow.setAlwaysOnTop(true, 'floating');
     dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Click-through until the pointer reaches the pill; the page still sees
+    // the pointer move so it knows when that happens.
+    dockWindow.setIgnoreMouseEvents(true, { forward: true });
     dockWindow.on('page-title-updated', (event) => event.preventDefault());
     dockWindow.loadFile(path.join(__dirname, 'dock', 'index.html'));
     dockWindow.webContents.on('did-finish-load', sendDockState);
@@ -1365,7 +1372,7 @@ function registerIpc() {
 
   ipcMain.on('dock:hover', (_event, expanded) => {
     dockExpanded = Boolean(expanded);
-    layoutDock();
+    if (isAlive(dockWindow)) dockWindow.setIgnoreMouseEvents(!dockExpanded, { forward: true });
   });
   ipcMain.on('dock:toggle', (_event, id) => {
     if (!configStore.getView(id)) return;

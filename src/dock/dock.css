@@ -32,20 +32,41 @@ body {
   user-select: none;
 }
 
-/* The pill hugs the screen edge: only the inner corners are rounded. */
+/* The pill hugs the screen edge with only its inner corners rounded. It
+   sits collapsed in the middle of the (transparent, full-size) window and
+   grows inward on hover; the strip stays at the edge the whole time. */
+:root {
+  --collapsed-w: 36px;
+  --collapsed-h: 124px;
+}
+
 .pill {
-  height: 100%;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: var(--collapsed-w);
+  height: var(--collapsed-h);
   display: flex;
+  flex-direction: row-reverse;
   background: linear-gradient(160deg, rgba(52, 38, 28, 0.97), var(--bg) 60%);
   border: 1px solid var(--border);
   border-right: none;
   border-radius: 14px 0 0 14px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   overflow: hidden;
+  transition: width 0.22s ease, height 0.22s ease;
+}
+
+body.expanded .pill {
+  width: 100%;
+  height: 100%;
 }
 
 body.side-left .pill {
-  flex-direction: row-reverse;
+  right: auto;
+  left: 0;
+  flex-direction: row;
   border-right: 1px solid var(--border);
   border-left: none;
   border-radius: 0 14px 14px 0;
@@ -119,18 +140,23 @@ body.side-left .pill {
 .panel {
   flex: 1;
   min-width: 0;
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 10px 10px 4px;
+  padding: 12px 4px 10px 10px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease 0.08s, visibility 0s linear 0.26s;
 }
 
 body.side-left .panel {
-  padding: 12px 4px 10px 10px;
+  padding: 12px 10px 10px 4px;
 }
 
 body.expanded .panel {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.18s ease 0.1s, visibility 0s;
 }
 
 .panel-head {

@@ -5,6 +5,10 @@ let state = { side: 'right', windows: [], obsConnected: false, outputs: {} };
 
 function render() {
   document.body.classList.toggle('side-left', state.side === 'left');
+  if (state.collapsed) {
+    document.documentElement.style.setProperty('--collapsed-w', `${state.collapsed.width}px`);
+    document.documentElement.style.setProperty('--collapsed-h', `${state.collapsed.height}px`);
+  }
   const outputs = state.outputs || {};
 
   // Collapsed strip
@@ -84,13 +88,39 @@ window.dock.onState((next) => {
   render();
 });
 
-document.body.addEventListener('mouseenter', () => {
-  document.body.classList.add('expanded');
-  window.dock.hover(true);
+// The window is click-through until the pointer is over the pill, and the
+// pointer's movement is forwarded to us meanwhile. Expanding is immediate;
+// collapsing waits a moment so crossing the pill's edge does not flicker.
+let expanded = false;
+let collapseTimer = 0;
+
+function setExpanded(next) {
+  if (expanded === next) return;
+  expanded = next;
+  document.body.classList.toggle('expanded', next);
+  window.dock.hover(next);
+}
+
+function overPill(event) {
+  const r = $('pill').getBoundingClientRect();
+  return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+}
+
+function scheduleCollapse() {
+  clearTimeout(collapseTimer);
+  collapseTimer = setTimeout(() => setExpanded(false), 260);
+}
+
+document.addEventListener('mousemove', (event) => {
+  if (overPill(event)) {
+    clearTimeout(collapseTimer);
+    setExpanded(true);
+  } else if (expanded) {
+    scheduleCollapse();
+  }
 });
-document.body.addEventListener('mouseleave', () => {
-  document.body.classList.remove('expanded');
-  window.dock.hover(false);
+document.addEventListener('mouseleave', () => {
+  if (expanded) scheduleCollapse();
 });
 
 $('cards').addEventListener('click', (event) => {
