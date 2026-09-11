@@ -255,6 +255,7 @@ function renderObs() {
     if (o.lastSync) {
       const bits = [];
       if (o.lastSync.pointed.length) bits.push(`re-pointed ${o.lastSync.pointed.join(', ')}`);
+      if (o.lastSync.restarted && o.lastSync.restarted.length) bits.push(`restarted capture of ${o.lastSync.restarted.join(', ')}`);
       if (o.lastSync.cropped && o.lastSync.cropped.length) bits.push(`cropped ${o.lastSync.cropped.join(', ')}`);
       if (o.lastSync.detected.length) bits.push(`linked ${o.lastSync.detected.map((d) => d.input).join(', ')}`);
       if (o.lastSync.missing.length) bits.push(`missing in OBS: ${o.lastSync.missing.join(', ')}`);

@@ -203,6 +203,21 @@ class ObsBridge extends EventEmitter {
     });
   }
 
+  // Make OBS start the capture again, as the "Restart capture" button in the
+  // source's properties does. A capture that began while the window was not
+  // yet on screen never produces frames until this happens.
+  async restartCapture(inputName, windowId) {
+    try {
+      await this.obs.call('PressInputPropertiesButton', { inputName, propertyName: 'reactivate_capture' });
+      return 'button';
+    } catch (err) {
+      // Fallback: clearing and re-setting the window forces a new capture.
+      await this.obs.call('SetInputSettings', { inputName, inputSettings: { type: CAPTURE_TYPE_WINDOW, window: 0 }, overlay: true });
+      await this.pointInput(inputName, windowId);
+      return 'reset';
+    }
+  }
+
   // Create or update the crop filter on a region's input. Crop values are in
   // captured pixels: { left, top, right, bottom }.
   async ensureCropFilter(inputName, crop) {
@@ -267,16 +282,19 @@ class ObsBridge extends EventEmitter {
    * Point every linked OBS input at the current window ID of its app window
    * and detect inputs that already point at one of our windows.
    *
+   * `force` lists view ids whose windows just appeared: their sources are
+   * re-pointed and their captures restarted even when the ID is unchanged.
+   *
    * @param {Array<{id: string, title: string, windowId: number|null, sources: string[], crop: object|null,
    *   regions: Array<{name: string, obsSource: string, crop: {left: number, top: number, right: number, bottom: number}}>}>} views
    * @returns {Promise<{pointed: string[], cropped: string[], missing: string[], detected: Array<{id: string, input: string}>}>}
    */
-  async syncViews(views) {
+  async syncViews(views, force = new Set()) {
     if (!this.connected) throw new Error('Not connected to OBS.');
     await this.refreshInputs();
     const choices = await this.windowChoices().catch(() => []);
     const known = new Set(this.inputs.map((i) => i.name));
-    const report = { pointed: [], cropped: [], missing: [], detected: [] };
+    const report = { pointed: [], cropped: [], missing: [], detected: [], restarted: [] };
 
     // Prefer the window ID OBS itself reports for our title; fall back to
     // the ID Electron knows.
@@ -301,11 +319,18 @@ class ObsBridge extends EventEmitter {
           report.missing.push(name);
           continue;
         }
-        if (!windowId) continue; // window not open
+        if (!windowId) continue; // window not open or not yet visible
         const current = this.inputs.find((i) => i.name === name);
-        if (current && current.window === windowId) continue;
-        await this.pointInput(name, windowId);
-        report.pointed.push(name);
+        const unchanged = current && current.window === windowId;
+        if (unchanged && !force.has(view.id)) continue;
+        if (!unchanged) {
+          await this.pointInput(name, windowId);
+          report.pointed.push(name);
+        }
+        if (force.has(view.id)) {
+          await this.restartCapture(name, windowId);
+          report.restarted.push(name);
+        }
       }
       // Window-level sources get a crop that removes the app's own bar.
       if (view.crop && windowId) {

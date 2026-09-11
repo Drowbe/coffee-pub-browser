@@ -214,10 +214,11 @@ function windowTitle(view) {
   return `${APP_NAME} - ${view.label}`;
 }
 
-// The system window ID macOS assigns to an open view window (changes on
-// every launch), or null when the window is not open.
+// The system window ID macOS assigns to an open, visible view window
+// (changes on every launch), or null when the window is not on screen yet:
+// OBS cannot start a working capture of a window that is not shown.
 function systemWindowId(win) {
-  if (!isAlive(win)) return null;
+  if (!isAlive(win) || !win.isVisible()) return null;
   const match = /^window:(\d+):/.exec(win.getMediaSourceId() || '');
   return match ? Number.parseInt(match[1], 10) : null;
 }
@@ -335,8 +336,12 @@ async function refreshRegions(view) {
 // crops current. Newly detected links are saved so they are re-pointed
 // automatically from then on.
 let obsSyncTimer = null;
+// Views whose windows appeared since the last sync: their captures get restarted.
+const freshlyShown = new Set();
 async function syncObs() {
   if (!obs.connected) return null;
+  const force = new Set(freshlyShown);
+  freshlyShown.clear();
   const views = [];
   for (const view of configStore.get().views) {
     const win = viewWindows.get(view.id);
@@ -350,7 +355,7 @@ async function syncObs() {
       regions: regions.filter((r) => r.enabled).map((r) => ({ name: r.name, obsSource: r.obsSource, crop: cropFor(win, r) })),
     });
   }
-  const report = await obs.syncViews(views);
+  const report = await obs.syncViews(views, force);
   for (const { id, input } of report.detected) {
     const view = configStore.getView(id);
     if (view && !view.obsSources.includes(input)) {
@@ -430,6 +435,7 @@ function createViewWindow(view) {
   const showView = () => {
     if (!isAlive(win) || win.isVisible()) return;
     win.show();
+    freshlyShown.add(view.id);
     broadcastStatus();
     scheduleObsSync();
   };
