@@ -69,6 +69,14 @@
             <span>Hide the Dock icon (menu bar only)</span>
           </label>
         </div>
+        <div class="row wake-row">
+          <label class="field field-inline wake-field">
+            <span>Wake audio after</span>
+            <input id="wake-delay" type="range" min="10" max="300" step="5">
+            <b id="wake-delay-value">30 s</b>
+          </label>
+          <span class="hint">How long after a page loads before the app sends the click that lets Foundry start its audio. Foundry ignores clicks until it has fully loaded, which can take longer than the page says.</span>
+        </div>
         <p class="hint" id="retina-hint"></p>
         <div class="row session-row">
           <span class="hint">Windows in the same session group log into Foundry together.</span>

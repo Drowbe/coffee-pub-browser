@@ -178,6 +178,7 @@ function defaultConfig() {
     panel: null,
     menuBarIcon: true,
     hideDockIcon: false,
+    wakeAudioDelay: 30, // seconds after a page loads before its audio is woken
     arrangeDisplayId: null,
     dock: defaultDock(),
     obs: defaultObs(),
@@ -279,6 +280,7 @@ function sanitizeConfig(input) {
     version: CONFIG_VERSION,
     menuBarIcon: src.menuBarIcon === undefined ? defaults.menuBarIcon : Boolean(src.menuBarIcon),
     hideDockIcon: src.hideDockIcon === undefined ? defaults.hideDockIcon : Boolean(src.hideDockIcon),
+    wakeAudioDelay: clamp(toInt(src.wakeAudioDelay, defaults.wakeAudioDelay), 10, 300),
     arrangeDisplayId: Number.isFinite(Number(src.arrangeDisplayId)) && src.arrangeDisplayId !== null ? Number(src.arrangeDisplayId) : null,
     dock: sanitizeDock(src.dock),
     obs: sanitizeObs(src.obs),

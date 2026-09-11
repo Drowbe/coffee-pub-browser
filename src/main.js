@@ -406,8 +406,10 @@ function wakeAudio(id) {
 // first gesture. null when the page cannot be asked.
 async function pageAudioState(wc) {
   try {
+    // Foundry declares `game` with let, so it is a global binding but not a
+    // window property; look it up by name in the page's own scope.
     return await wc.executeJavaScript(
-      '(() => { const g = window.game; if (!g || typeof g !== "object") return { foundry: false };' +
+      '(() => { const g = typeof game !== "undefined" ? game : window.game; if (!g || typeof g !== "object") return { foundry: false };' +
         ' return { foundry: true, ready: g.ready === true, locked: g.audio && typeof g.audio.locked === "boolean" ? g.audio.locked : null }; })()',
       true,
     );
@@ -416,37 +418,30 @@ async function pageAudioState(wc) {
   }
 }
 
-// Wake the page's audio once it is really ready: a plain page right away,
-// a Foundry page once game.ready is set, retrying the click while Foundry
-// still reports its audio locked. Gives up after three minutes.
+// Wake the page's audio: wait the delay set on the Session tab (Foundry
+// ignores clicks until it has finished setting up, which the page does not
+// announce reliably), click, then keep clicking every few seconds while
+// Foundry still reports its audio locked. Gives up after three minutes.
 const wakeTimers = new Map();
 function stopWake(id) {
   clearTimeout(wakeTimers.get(id));
   wakeTimers.delete(id);
 }
-function wakeWhenReady(id) {
+function wakeWhenReady(id, delayMs = configStore.get().wakeAudioDelay * 1000) {
   stopWake(id);
   const started = Date.now();
   let clicks = 0;
   const tick = async () => {
     wakeTimers.delete(id);
     const wc = pageOf(id);
-    if (!wc || wc.isDestroyed() || Date.now() - started > 180000) return;
+    if (!wc || wc.isDestroyed() || Date.now() - started > delayMs + 180000) return;
+    wakeAudio(id);
+    clicks += 1;
     const state = await pageAudioState(wc);
-    if (!wc || wc.isDestroyed()) return;
-    if (!state || !state.foundry) {
-      wakeAudio(id); // not Foundry: one gesture is all there is to give
-      return;
-    }
-    if (state.ready && state.locked !== true && clicks > 0) return; // unlocked
-    if (state.ready) {
-      wakeAudio(id);
-      clicks += 1;
-      if (clicks >= 12 || state.locked === null) return; // no lock to watch, or enough tries
-    }
-    wakeTimers.set(id, setTimeout(tick, state.ready ? 3000 : 2000));
+    if (!state || !state.foundry || state.locked !== true || clicks >= 30) return; // not Foundry, unlocked, or enough tries
+    wakeTimers.set(id, setTimeout(tick, 5000));
   };
-  wakeTimers.set(id, setTimeout(tick, 1500));
+  wakeTimers.set(id, setTimeout(tick, delayMs));
 }
 
 function viewStatus(view) {
@@ -1462,6 +1457,12 @@ function registerIpc() {
     else if (name === 'stopAll') closeAllViews();
     else if (name === 'sync') syncObs().catch(() => {});
     else if (name === 'panel') createControlWindow();
+    else if (name === 'wakeAudio') {
+      for (const id of viewWindows.keys()) {
+        if (wakeAudio(id)) wakeWhenReady(id, 5000);
+      }
+      setTimeout(broadcastStatus, 800);
+    }
   });
 
   // --- OBS ---
@@ -1695,7 +1696,7 @@ function registerIpc() {
   });
   ipcMain.handle('view:wakeAudio', (_event, id) => {
     if (!wakeAudio(id)) throw new Error('Start the window first.');
-    wakeWhenReady(id); // and keep at it if Foundry is still loading
+    wakeWhenReady(id, 5000); // and keep at it while Foundry says it is still locked
     setTimeout(broadcastStatus, 800);
   });
   ipcMain.handle('views:arrange', (_event, displayId) => arrangeViews(displayId));

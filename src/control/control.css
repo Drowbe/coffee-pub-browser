@@ -668,6 +668,16 @@ select:focus {
   margin-left: 22px;
 }
 
+.wake-field input[type="range"] {
+  width: 220px;
+  accent-color: var(--accent);
+}
+
+.wake-field b {
+  min-width: 48px;
+  font-weight: 600;
+}
+
 .card-footer {
   justify-content: space-between;
   padding-top: 10px;

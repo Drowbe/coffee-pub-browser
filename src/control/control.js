@@ -8,6 +8,9 @@ const viewTabsEl = $('view-tabs');
 const template = $('view-template');
 const saveStateEl = $('save-state');
 const menuBarIconEl = $('menu-bar-icon');
+const wakeDelayEl = $('wake-delay');
+const wakeDelayValueEl = $('wake-delay-value');
+const describeDelay = (s) => (s < 60 ? `${s} s` : s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`);
 const hideDockIconEl = $('hide-dock-icon');
 const arrangeDisplayEl = $('arrange-display');
 const retinaHintEl = $('retina-hint');
@@ -167,6 +170,8 @@ function applyConfig(next) {
     config.views.every((v, i) => v.id === next.views[i].id && v.label === next.views[i].label);
   config = next;
   menuBarIconEl.checked = config.menuBarIcon;
+  if (document.activeElement !== wakeDelayEl) wakeDelayEl.value = String(config.wakeAudioDelay);
+  wakeDelayValueEl.textContent = describeDelay(config.wakeAudioDelay);
   dockEnabledEl.checked = config.dock.enabled;
   dockSideEl.value = config.dock.side;
   dockSideEl.disabled = !config.dock.enabled;
@@ -704,6 +709,7 @@ async function flushSave() {
   try {
     config.menuBarIcon = menuBarIconEl.checked;
     config.hideDockIcon = hideDockIconEl.checked;
+    config.wakeAudioDelay = Number(wakeDelayEl.value);
     config.dock = { enabled: dockEnabledEl.checked, side: dockSideEl.value === 'left' ? 'left' : 'right', overlap: Number(dockOverlapEl.value) };
     if (arrangeDisplayEl.value) config.arrangeDisplayId = Number(arrangeDisplayEl.value);
     const saved = await api.saveConfig(config);
@@ -729,7 +735,10 @@ arrangeDisplayEl.addEventListener('change', () => {
   config.arrangeDisplayId = Number(arrangeDisplayEl.value);
   scheduleSave();
 });
-for (const el of [menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl]) el.addEventListener('change', scheduleSave);
+for (const el of [menuBarIconEl, hideDockIconEl, dockEnabledEl, dockSideEl, dockOverlapEl, wakeDelayEl]) el.addEventListener('change', scheduleSave);
+wakeDelayEl.addEventListener('input', () => {
+  wakeDelayValueEl.textContent = describeDelay(Number(wakeDelayEl.value));
+});
 $('clear-session').addEventListener('click', () => api.clearSession());
 $('reveal-config').addEventListener('click', () => api.revealConfig());
 $('reset-config').addEventListener('click', async () => {

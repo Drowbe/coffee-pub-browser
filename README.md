@@ -334,6 +334,7 @@ Settings are stored as JSON at
 | --- | --- |
 | `panel` | Where the control panel was last left (`x`, `y`, `width`, `height`), written by the app; `null` lets macOS place it. |
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
+| `wakeAudioDelay` | Seconds after a page loads before its audio is woken (**Wake audio after** on the Session tab, 10 to 300, default 30). Foundry ignores clicks until it has fully loaded, which can take longer than the page says. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
 | `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; `room`, the Tavern room whose users the Tavern tab lists (`lobby` by default); and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
@@ -346,7 +347,7 @@ Settings are stored as JSON at
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (**Start on launch**). |
 | `dockOnLaunch` | Slide the window into the dock as soon as its page has loaded at launch (**Dock on launch**). |
-| `wakeAudio` | Send the page a middle-button click once Foundry reports it has finished loading, so its audio can start (**Wake audio after load**, on by default). Browsers keep a page silent until someone interacts with it, and Foundry ignores clicks until it is fully set up, which can take half a minute; the app asks the page when that is and keeps clicking while Foundry still says its audio is locked, for up to three minutes. The **Wake audio** button does the same on demand, and the **Page audio** row says whether the page is making sound right now. |
+| `wakeAudio` | Send the page a middle-button click after the **Wake audio after** delay, so Foundry can start its audio (**Wake audio after load**, on by default). Browsers keep a page silent until someone interacts with it, and Foundry ignores clicks until it is fully set up; after the delay the app clicks, and keeps clicking every few seconds while Foundry still says its audio is locked, for up to three minutes. The **Wake audio** button on the card and on the dock does the same on demand, and the **Page audio** row says whether the page is making sound right now. |
 | `session` | Session group name (default `Main`). Windows with the same name share cookies and storage. |
 
 ## Releasing a new version
