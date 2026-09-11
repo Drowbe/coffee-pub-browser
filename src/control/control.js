@@ -914,6 +914,7 @@ $('tavern-unpublish-all').addEventListener('click', () => {
 $('tavern-sync').addEventListener('click', () => api.tavernSync().catch(reportError));
 $('tavern-room').addEventListener('change', async () => {
   const room = $('tavern-room').value;
+  $('tavern-room').blur();
   config.tavern.room = room;
   try {
     status.tavern = await api.tavernSetSettings({ room });
@@ -962,8 +963,12 @@ function renderTavern() {
   const rooms = connected ? t.rooms || [] : [];
   const chosenId = (config && config.tavern.room) || 'lobby';
   const room = rooms.find((r) => r.id === chosenId) || rooms.find((r) => r.isLobby) || rooms[0] || null;
+  // Rebuild the list only when it changed, so a room added on the Tavern
+  // shows up even while the chooser has focus.
   const select = $('tavern-room');
-  if (!isEditing(select)) {
+  const wanted = rooms.map((r) => `${r.id} ${r.isLobby ? `${r.name} (everyone)` : r.name}`);
+  const have = [...select.options].map((o) => `${o.value} ${o.textContent}`);
+  if (wanted.join('\n') !== have.join('\n')) {
     select.textContent = '';
     for (const r of rooms) {
       const option = document.createElement('option');
@@ -971,8 +976,8 @@ function renderTavern() {
       option.textContent = r.isLobby ? `${r.name} (everyone)` : r.name;
       select.appendChild(option);
     }
-    if (room) select.value = room.id;
   }
+  if (room && select.value !== room.id) select.value = room.id;
   select.disabled = !connected || rooms.length < 2;
   tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Room';
   $('tavern-room-name').textContent = room ? room.name : 'Lobby';

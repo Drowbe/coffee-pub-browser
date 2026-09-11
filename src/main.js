@@ -377,12 +377,21 @@ function displaySummary(display) {
   };
 }
 
-// A user gesture for the page: F16 has no meaning to Foundry or the page,
-// but a key press counts as the interaction that lets audio start.
+// A user gesture for the page, so its audio may start: a middle-button
+// click in the middle of the page (Foundry does nothing with the middle
+// button, and a click is what its audio gate waits for), plus an F16 key
+// press, which means nothing to the page either.
 function wakeAudio(id) {
   const wc = pageOf(id);
-  if (!wc || wc.isDestroyed()) return false;
+  const win = viewWindows.get(id);
+  if (!wc || wc.isDestroyed() || !isAlive(win)) return false;
   try {
+    const [width, height] = pageSize(win);
+    const x = Math.round(width / 2);
+    const y = Math.round(height / 2);
+    wc.sendInputEvent({ type: 'mouseMove', x, y });
+    wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'middle', clickCount: 1 });
+    wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'middle', clickCount: 1 });
     wc.sendInputEvent({ type: 'keyDown', keyCode: 'F16' });
     wc.sendInputEvent({ type: 'keyUp', keyCode: 'F16' });
     return true;
