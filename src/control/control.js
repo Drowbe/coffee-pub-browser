@@ -979,8 +979,7 @@ function renderTavern() {
   }
   if (room && select.value !== room.id) select.value = room.id;
   select.disabled = !connected || rooms.length < 2;
-  tavernEls.title.textContent = t.tableName ? `${t.tableName} at ${t.serverName}` : 'Room';
-  $('tavern-room-name').textContent = room ? room.name : 'Lobby';
+  tavernEls.title.textContent = connected && room ? `${t.serverName}: ${room.name}` : 'Room';
   $('tavern-room-desc').textContent = room ? room.description : '';
   const roomImage = $('tavern-room-image');
   const roomImageUrl = room && room.hasImage ? `${t.url}/img/room/${encodeURIComponent(room.id)}?s=${encodeURIComponent(t.streamKey)}` : '';
@@ -1031,8 +1030,9 @@ function renderTavern() {
     const dot = card.querySelector('[data-role="online"]');
     dot.classList.toggle('on', Boolean(user.online));
     dot.title = user.online ? 'at the table' : 'offline';
+    const inRoom = user.online && user.online.room ? rooms.find((r) => r.id === user.online.room) : null;
     card.querySelector('[data-role="live"]').textContent = user.online
-      ? `${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
+      ? `${inRoom ? `in ${inRoom.name} · ` : ''}${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
       : 'offline';
     const isOn = isPublished(entry);
     card.querySelector('[data-role="published"]').hidden = !isOn;
