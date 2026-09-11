@@ -184,7 +184,7 @@ function tavernSourceName(user, kind = 'player') {
 }
 
 // The Player source: video, or the player image when the camera is off, with
-// the talking border, muted badge and name plate as set on the Tavern. Audio
+// the talking border, overlay images and name plate as set on the Tavern. Audio
 // always on and routed to the OBS mixer.
 function tavernPlayerSource(user) {
   const t = configStore.get().tavern;

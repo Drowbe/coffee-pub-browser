@@ -216,7 +216,7 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    `https://tavern.coffeepub.live`), your admin login and password, click **Save password**, then
    **Sign in**. Tick **Sign in automatically** to reconnect at every launch.
 2. Set the source sizes. The **Player source** is the player's video, or their player image
-   when the camera is off, with the talking border, muted badge and name plate set on the
+   when the camera is off, with the talking border, overlays and name plate set on the
    Tavern in each user's Player section. Width and height, with **Constrain proportions**
    keeping them at 16:9. Audio is always included; the source's own **Control audio via OBS** in OBS decides whether
    it reaches the mixer. The **Character source** is the character image with the talking and
@@ -229,9 +229,8 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    and the ticked sources appear in the current OBS scene: `Tavern - <name>` for the Player
    and `Tavern - <name> (character)` for the Character. Changing a tick while they are
    published adds or removes that source at once. **Publish all** publishes everyone who is
-   not in OBS yet, with their ticks. What the sources show, the images, the border colour,
-   the badge and the name plate, is all set on the Tavern's manage page; **Manage party**
-   opens it.
+   not in OBS yet, with their ticks. What the sources show, the images, the border colour
+   and the name plate, is all set on the Tavern's manage page; **Manage users** opens it.
 4. The app keeps the sources in sync: renaming a user on the Tavern renames both OBS sources,
    changing a size updates every source, and sources missing from OBS are created again on
    **Sync OBS** or whenever OBS connects. Users are tracked by the Tavern's stable key, so

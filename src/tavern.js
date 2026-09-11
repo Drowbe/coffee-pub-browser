@@ -180,7 +180,7 @@ class TavernBridge extends EventEmitter {
   }
 
   // OBS view link for a user: kind is 'player' or 'character'. The name
-  // plate, border and badge are the user's Player options on the Tavern.
+  // plate, border and overlays are the user's Player options on the Tavern.
   viewUrl(user, { kind = 'player' } = {}) {
     const base = `${this.getSettings().url}/view/${encodeURIComponent(user.key)}`;
     const q = new URLSearchParams({ s: this.streamKey, kind });
