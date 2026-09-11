@@ -401,6 +401,54 @@ function wakeAudio(id) {
   }
 }
 
+// What the page says about itself: whether it is Foundry, whether Foundry
+// has finished loading, and whether its audio is still locked behind a
+// first gesture. null when the page cannot be asked.
+async function pageAudioState(wc) {
+  try {
+    return await wc.executeJavaScript(
+      '(() => { const g = window.game; if (!g || typeof g !== "object") return { foundry: false };' +
+        ' return { foundry: true, ready: g.ready === true, locked: g.audio && typeof g.audio.locked === "boolean" ? g.audio.locked : null }; })()',
+      true,
+    );
+  } catch (err) {
+    return null;
+  }
+}
+
+// Wake the page's audio once it is really ready: a plain page right away,
+// a Foundry page once game.ready is set, retrying the click while Foundry
+// still reports its audio locked. Gives up after three minutes.
+const wakeTimers = new Map();
+function stopWake(id) {
+  clearTimeout(wakeTimers.get(id));
+  wakeTimers.delete(id);
+}
+function wakeWhenReady(id) {
+  stopWake(id);
+  const started = Date.now();
+  let clicks = 0;
+  const tick = async () => {
+    wakeTimers.delete(id);
+    const wc = pageOf(id);
+    if (!wc || wc.isDestroyed() || Date.now() - started > 180000) return;
+    const state = await pageAudioState(wc);
+    if (!wc || wc.isDestroyed()) return;
+    if (!state || !state.foundry) {
+      wakeAudio(id); // not Foundry: one gesture is all there is to give
+      return;
+    }
+    if (state.ready && state.locked !== true && clicks > 0) return; // unlocked
+    if (state.ready) {
+      wakeAudio(id);
+      clicks += 1;
+      if (clicks >= 12 || state.locked === null) return; // no lock to watch, or enough tries
+    }
+    wakeTimers.set(id, setTimeout(tick, state.ready ? 3000 : 2000));
+  };
+  wakeTimers.set(id, setTimeout(tick, 1500));
+}
+
 function viewStatus(view) {
   const win = viewWindows.get(view.id);
   if (!isAlive(win)) {
@@ -712,13 +760,16 @@ function createViewWindow(view) {
   });
   wc.on('did-finish-load', broadcastStatus);
   // Browsers keep a page silent until the user interacts with it, and
-  // Foundry waits for that first gesture before starting its audio. A key
-  // press sent through the input pipeline counts as one.
+  // Foundry waits for that first gesture before starting its audio. The
+  // page reports "loaded" long before Foundry has finished setting up (a
+  // scene can take half a minute), and Foundry ignores clicks until then,
+  // so the wake waits for Foundry to say it is ready.
   wc.on('did-finish-load', () => {
     const current = configStore.getView(view.id);
     if (!current || !current.wakeAudio) return;
-    setTimeout(() => wakeAudio(view.id), 1500);
+    wakeWhenReady(view.id);
   });
+  wc.on('did-start-loading', () => stopWake(view.id));
   wc.on('audio-state-changed', broadcastStatus);
   wc.on('did-start-loading', broadcastStatus);
   wc.on('did-stop-loading', broadcastStatus);
@@ -753,6 +804,7 @@ function createViewWindow(view) {
     scheduleObsSync();
   });
   win.on('closed', () => {
+    stopWake(view.id);
     viewWindows.delete(view.id);
     pageViews.delete(view.id);
     parked.delete(view.id);
@@ -1643,6 +1695,7 @@ function registerIpc() {
   });
   ipcMain.handle('view:wakeAudio', (_event, id) => {
     if (!wakeAudio(id)) throw new Error('Start the window first.');
+    wakeWhenReady(id); // and keep at it if Foundry is still loading
     setTimeout(broadcastStatus, 800);
   });
   ipcMain.handle('views:arrange', (_event, displayId) => arrangeViews(displayId));

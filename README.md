@@ -346,7 +346,7 @@ Settings are stored as JSON at
 | `muted` | Mute the window's audio. Handy for the Stream window so chat sounds are not doubled. |
 | `enabled` | Open this window when the app launches (**Start on launch**). |
 | `dockOnLaunch` | Slide the window into the dock as soon as its page has loaded at launch (**Dock on launch**). |
-| `wakeAudio` | Send the page a middle-button click after it loads so Foundry can start its audio (**Wake audio after load**, on by default). Browsers keep a page silent until someone interacts with it; the **Wake audio** button sends the click again, and the **Page audio** row says whether the page is making sound right now. If it still stays quiet, click once inside the page. |
+| `wakeAudio` | Send the page a middle-button click once Foundry reports it has finished loading, so its audio can start (**Wake audio after load**, on by default). Browsers keep a page silent until someone interacts with it, and Foundry ignores clicks until it is fully set up, which can take half a minute; the app asks the page when that is and keeps clicking while Foundry still says its audio is locked, for up to three minutes. The **Wake audio** button does the same on demand, and the **Page audio** row says whether the page is making sound right now. |
 | `session` | Session group name (default `Main`). Windows with the same name share cookies and storage. |
 
 ## Releasing a new version
