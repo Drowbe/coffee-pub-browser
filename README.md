@@ -281,7 +281,7 @@ Settings are stored as JSON at
       "id": "stream",
       "label": "Stream",
       "url": "https://game.coffeepub.live/stream",
-      "width": 600,
+      "width": 1920,
       "height": 1080,
       "x": null,
       "y": null,

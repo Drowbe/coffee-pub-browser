@@ -22,7 +22,8 @@ const LIMITS = {
 // Defaults for the first two windows on a fresh install.
 const SEED_VIEWS = [
   { id: 'game', label: 'Game', url: 'https://game.coffeepub.live/game', width: 1920, height: 1080, muted: false },
-  { id: 'stream', label: 'Stream', url: 'https://game.coffeepub.live/stream', width: 600, height: 1080, muted: true },
+  // Same size as the canvas: regions pick out the chat and any widgets a module adds anywhere on the page.
+  { id: 'stream', label: 'Stream', url: 'https://game.coffeepub.live/stream', width: 1920, height: 1080, muted: true },
 ];
 
 function defaultView(index) {
