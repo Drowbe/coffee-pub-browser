@@ -779,6 +779,7 @@ const tavernEls = {
   plate: $('tavern-plate'),
   border: $('tavern-border'),
   indicator: $('tavern-indicator'),
+  statusMode: $('tavern-status-mode'),
   statusWidth: $('tavern-status-width'),
   statusHeight: $('tavern-status-height'),
   connect: $('tavern-connect'),
@@ -813,6 +814,7 @@ function applyTavernConfig() {
   tavernEls.plate.checked = t.plate;
   tavernEls.border.checked = t.border;
   tavernEls.indicator.checked = t.indicator;
+  tavernEls.statusMode.value = t.statusMode;
   if (document.activeElement !== tavernEls.statusWidth) tavernEls.statusWidth.value = String(t.statusWidth);
   if (document.activeElement !== tavernEls.statusHeight) tavernEls.statusHeight.value = String(t.statusHeight);
 }
@@ -841,6 +843,7 @@ async function saveTavernSettings() {
     plate: tavernEls.plate.checked,
     border: tavernEls.border.checked,
     indicator: tavernEls.indicator.checked,
+    statusMode: tavernEls.statusMode.value,
     statusWidth: Number(tavernEls.statusWidth.value) || 256,
     statusHeight: Number(tavernEls.statusHeight.value) || 256,
   };
@@ -853,7 +856,7 @@ async function saveTavernSettings() {
   }
   renderTavern();
 }
-for (const el of [tavernEls.enabled, tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.lock, tavernEls.mode, tavernEls.audio, tavernEls.plate, tavernEls.border, tavernEls.indicator, tavernEls.statusWidth, tavernEls.statusHeight]) {
+for (const el of [tavernEls.enabled, tavernEls.url, tavernEls.login, tavernEls.auto, tavernEls.width, tavernEls.height, tavernEls.lock, tavernEls.mode, tavernEls.audio, tavernEls.plate, tavernEls.border, tavernEls.indicator, tavernEls.statusMode, tavernEls.statusWidth, tavernEls.statusHeight]) {
   el.addEventListener('change', saveTavernSettings);
 }
 $('tavern-save-password').addEventListener('click', async () => {

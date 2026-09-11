@@ -110,7 +110,7 @@ function defaultTavern() {
   return {
     enabled: false, url: '', login: '', autoConnect: true,
     width: 640, height: 360, lockRatio: true, mode: 'auto', audio: false, plate: false, border: true,
-    indicator: false, statusWidth: 256, statusHeight: 256,
+    indicator: false, statusMode: 'status', statusWidth: 256, statusHeight: 256,
     players: {},
   };
 }
@@ -145,6 +145,7 @@ function sanitizeTavern(input) {
     plate: src.plate === undefined ? d.plate : Boolean(src.plate),
     border: src.border === undefined ? d.border : Boolean(src.border),
     indicator: src.indicator === undefined ? d.indicator : Boolean(src.indicator),
+    statusMode: src.statusMode === 'avatar' ? 'avatar' : 'status',
     statusWidth: clamp(toInt(src.statusWidth, d.statusWidth), 32, 3840),
     statusHeight: clamp(toInt(src.statusHeight, d.statusHeight), 32, 2160),
     players,

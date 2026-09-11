@@ -199,9 +199,16 @@
             <span>Height</span>
             <input id="tavern-status-height" type="number" min="32" max="2160" step="1" size="5">
           </label>
-          <label class="check" title="A second, transparent source per player that shows their Talking image while they speak and their Muted image while their microphone is off. Overlay it on a character bar."><input id="tavern-indicator" type="checkbox"><span>Publish an indicator with each player</span></label>
+          <label class="field field-inline">
+            <span>Shows</span>
+            <select id="tavern-status-mode">
+              <option value="status">Talking and Muted images only, transparent otherwise</option>
+              <option value="avatar">Normal, Talking or Muted image, always</option>
+            </select>
+          </label>
+          <label class="check" title="A second source per player next to the video one. Overlay it on a character bar."><input id="tavern-indicator" type="checkbox"><span>Publish an indicator with each player</span></label>
         </div>
-        <p class="hint">The indicator is a second source that stays transparent until the player talks (their Talking image) or mutes (their Muted image). Set those images on the Tavern's manage page.</p>
+        <p class="hint">The indicator is a second source per player. With "Talking and Muted only" it stays transparent until they talk or mute; with "always" it shows the Normal image in between, so it can stand in for a character portrait. Set the images on the Tavern's manage page.</p>
         <p class="hint" id="tavern-status">Not signed in.</p>
         </div>
       </div>

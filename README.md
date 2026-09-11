@@ -211,9 +211,10 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    **talking border**, the green frame from the table around the source while they speak.
    The **talking indicator** is a second, transparent source per player that shows their
    Talking image while they speak and their Muted image while their microphone is off, made for
-   overlaying a character bar; set its size here and tick **Publish an indicator with each
-   player** to create one alongside every video source, or add it per player with the
-   **Indicator** button.
+   overlaying a character bar; set its size here, choose whether it shows only those two images
+   or the Normal image in between as well (a live character portrait), and tick **Publish an
+   indicator with each player** to create one alongside every video source, or add it per
+   player with the **Indicator** button.
 3. Open the **Tavern** tab. Every account on the server is listed with a green dot while they are
    at the table and their microphone and camera state. Click **Publish** on a player and a Browser
    Source named `Tavern - <name>` appears in the current OBS scene, pointed at their view page at
@@ -315,7 +316,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, default source `width`, `height`, `lockRatio`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, `border`; the indicator's `indicator` (publish one with each player), `statusWidth`, `statusHeight`; and `players`, a map from the player's Tavern key to `{ source, statusSource, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, default source `width`, `height`, `lockRatio`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, `border`; the indicator's `indicator` (publish one with each player), `statusMode` (`status` or `avatar`), `statusWidth`, `statusHeight`; and `players`, a map from the player's Tavern key to `{ source, statusSource, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

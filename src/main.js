@@ -195,7 +195,7 @@ function tavernPlayerOptions(entry) {
 // talking and muted images, for overlaying a character bar.
 function tavernStatusOptions() {
   const t = configStore.get().tavern;
-  return { mode: 'status', audio: false, plate: false, border: false, width: t.statusWidth, height: t.statusHeight };
+  return { mode: t.statusMode === 'avatar' ? 'avatar' : 'status', audio: false, plate: false, border: false, width: t.statusWidth, height: t.statusHeight };
 }
 
 // Make OBS match the published players: one Browser Source each, named after
