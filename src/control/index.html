@@ -165,7 +165,7 @@
           <button id="tavern-save-password" class="btn" type="button">Save password</button>
         </div>
         <div class="row">
-          <span class="field-label">New sources</span>
+          <span class="field-label">Player source</span>
           <label class="field field-inline">
             <span>Width</span>
             <input id="tavern-width" type="number" min="64" max="3840" step="1" size="5">
@@ -175,22 +175,11 @@
             <input id="tavern-height" type="number" min="64" max="2160" step="1" size="5">
           </label>
           <label class="check" title="Keep width and height at 16:9, the shape of the camera"><input id="tavern-lock" type="checkbox"><span>Constrain proportions</span></label>
-        </div>
-        <div class="row">
-          <label class="field field-inline">
-            <span>Show</span>
-            <select id="tavern-mode">
-              <option value="auto">Video, images when the camera is off</option>
-              <option value="video">Video only</option>
-              <option value="avatar">Images only</option>
-            </select>
-          </label>
-          <label class="check" title="The player's voice plays through this Browser Source, so it is recorded and shows as its own track in the OBS mixer. Off: the source is silent and you take their voice from elsewhere."><input id="tavern-audio" type="checkbox"><span>Include their audio in OBS</span></label>
           <label class="check" title="Their display name in the corner of the source"><input id="tavern-plate" type="checkbox"><span>Name plate</span></label>
-          <label class="check" title="A green frame around the source while they speak, like the highlight at the table"><input id="tavern-border" type="checkbox"><span>Talking border</span></label>
         </div>
+        <p class="hint">The player's video, or their player image when the camera is off, with the talking border and muted badge set on the Tavern. Audio is always included; use the source's <strong>Control audio via OBS</strong> in OBS for the mixer.</p>
         <div class="row">
-          <span class="field-label">Talking indicator</span>
+          <span class="field-label">Character source</span>
           <label class="field field-inline">
             <span>Width</span>
             <input id="tavern-status-width" type="number" min="32" max="3840" step="1" size="5">
@@ -199,16 +188,9 @@
             <span>Height</span>
             <input id="tavern-status-height" type="number" min="32" max="2160" step="1" size="5">
           </label>
-          <label class="field field-inline">
-            <span>Shows</span>
-            <select id="tavern-status-mode">
-              <option value="status">Talking and Muted images only, transparent otherwise</option>
-              <option value="avatar">Normal, Talking or Muted image, always</option>
-            </select>
-          </label>
-          <label class="check" title="A second source per player next to the video one. Overlay it on a character bar."><input id="tavern-indicator" type="checkbox"><span>Publish an indicator with each player</span></label>
+          <label class="check" title="Create the Character source alongside the Player source whenever you publish someone"><input id="tavern-indicator" type="checkbox"><span>Publish the character with each player</span></label>
         </div>
-        <p class="hint">The indicator is a second source per player. With "Talking and Muted only" it stays transparent until they talk or mute; with "always" it shows the Normal image in between, so it can stand in for a character portrait. Set the images on the Tavern's manage page.</p>
+        <p class="hint">A second source: the character image with the talking and muted images on top, set on the Tavern. With no character image it stays transparent until they talk or mute, so it can sit over a character bar.</p>
         <p class="hint" id="tavern-status">Not signed in.</p>
         </div>
       </div>
@@ -338,30 +320,11 @@
         <div class="player-source">
           <span class="chips" data-role="chips"></span>
         </div>
-        <div class="row player-options" data-role="options" hidden>
-          <label class="field field-inline">
-            <span>Show</span>
-            <select data-pfield="mode">
-              <option value="">Default</option>
-              <option value="auto">Video, images when off</option>
-              <option value="video">Video only</option>
-              <option value="avatar">Images only</option>
-            </select>
-          </label>
-          <label class="field field-inline">
-            <span>Audio</span>
-            <select data-pfield="audio"><option value="">Default</option><option value="on">Through OBS</option><option value="off">Off</option></select>
-          </label>
-          <label class="field field-inline">
-            <span>Plate</span>
-            <select data-pfield="plate"><option value="">Default</option><option value="on">Show</option><option value="off">Hide</option></select>
-          </label>
-        </div>
       </div>
       <div class="player-actions">
         <button class="btn btn-small btn-primary" data-action="publish" type="button">Publish</button>
-        <button class="btn btn-small" data-action="indicator" type="button" title="A second source with only the talking and muted images, for overlaying a character bar">Indicator</button>
-        <button class="btn btn-small" data-action="copy-link" type="button" title="Copy the OBS view link">Copy link</button>
+        <button class="btn btn-small" data-action="character" type="button" title="The Character source: their character image with the talking and muted images on top">Character</button>
+        <button class="btn btn-small" data-action="copy-link" type="button" title="Copy the Player view link">Copy link</button>
         <button class="btn btn-small" data-action="mute" type="button" title="Mute their microphone at the table" hidden>Mute</button>
         <button class="btn btn-small btn-danger" data-action="kick" type="button" title="Disconnect them from the table" hidden>Kick</button>
       </div>

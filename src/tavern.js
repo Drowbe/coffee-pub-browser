@@ -156,6 +156,7 @@ class TavernBridge extends EventEmitter {
       displayName: u.displayName,
       role: u.role,
       images: u.images,
+      player: u.player,
       viewUrl: u.viewUrl,
       online: u.online,
     }));
@@ -170,17 +171,15 @@ class TavernBridge extends EventEmitter {
     return this.party;
   }
 
-  // OBS view link for a player.
-  viewUrl(user, { mode = 'auto', audio = false, plate = false, border = false } = {}) {
+  // OBS view link for a user: kind is 'player' or 'character'.
+  viewUrl(user, { kind = 'player', plate = false } = {}) {
     const base = `${this.getSettings().url}/view/${encodeURIComponent(user.key)}`;
-    const q = new URLSearchParams({ s: this.streamKey, mode });
-    if (audio) q.set('audio', '1');
-    if (plate) q.set('plate', '1');
-    if (border && mode !== 'status') q.set('border', '1');
+    const q = new URLSearchParams({ s: this.streamKey, kind });
+    if (plate && kind === 'player') q.set('plate', '1');
     return `${base}?${q}`;
   }
 
-  imageUrl(user, slot = 'novideo') {
+  imageUrl(user, slot = 'player') {
     return `${this.getSettings().url}/img/${encodeURIComponent(user.key)}/${slot}?s=${encodeURIComponent(this.streamKey)}`;
   }
 

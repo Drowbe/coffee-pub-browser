@@ -204,29 +204,27 @@ server. The app signs in to it as an admin and gives every player their own OBS 
    shows while it is on), then enter the server address (for example
    `https://tavern.coffeepub.live`), your admin login and password, click **Save password**, then
    **Sign in**. Tick **Sign in automatically** to reconnect at every launch.
-2. Set the defaults for new sources: width and height (with **Constrain proportions** keeping
-   them at 16:9), what to **show** (video with the player's images when the camera is off, video
-   only, or images only), **Include their audio in OBS** (their voice plays through the source and
-   gets its own track in the OBS mixer; off makes the source silent), a **name plate**, and a
-   **talking border**, the green frame from the table around the source while they speak.
-   The **talking indicator** is a second, transparent source per player that shows their
-   Talking image while they speak and their Muted image while their microphone is off, made for
-   overlaying a character bar; set its size here, choose whether it shows only those two images
-   or the Normal image in between as well (a live character portrait), and tick **Publish an
-   indicator with each player** to create one alongside every video source, or add it per
-   player with the **Indicator** button.
+2. Set the source sizes. The **Player source** is the player's video, or their player image
+   when the camera is off, with the talking border and muted badge set on the Tavern. Width and
+   height, with **Constrain proportions** keeping them at 16:9, and an optional **name plate**.
+   Audio is always included; the source's own **Control audio via OBS** in OBS decides whether
+   it reaches the mixer. The **Character source** is the character image with the talking and
+   muted images on top, transparent until they talk or mute when there is no character image,
+   made for overlaying a character bar. Set its size, and tick **Publish the character with
+   each player** to create both sources whenever you publish someone.
 3. Open the **Tavern** tab. Every account on the server is listed with a green dot while they are
-   at the table and their microphone and camera state. Click **Publish** on a player and a Browser
-   Source named `Tavern - <name>` appears in the current OBS scene, pointed at their view page at
-   the chosen size. **Publish all** does everyone at once. Each published player can override
-   the show, audio and plate defaults on their card.
-4. The app keeps the sources in sync: renaming a player on the Tavern renames the OBS source,
-   changing the defaults updates every source, and sources missing from OBS are created again on
-   **Sync OBS** or whenever OBS connects. Players are tracked by the Tavern's stable key, so
+   at the table and their microphone and camera state. Click **Publish** on a user and a Browser
+   Source named `Tavern - <name>` appears in the current OBS scene. **Character** adds
+   `Tavern - <name> (character)` next to it. **Publish all** does everyone at once. What the
+   sources show, the images, the border colour and the badge, is all set on the Tavern's manage
+   page; **Manage party** opens it.
+4. The app keeps the sources in sync: renaming a user on the Tavern renames both OBS sources,
+   changing a size updates every source, and sources missing from OBS are created again on
+   **Sync OBS** or whenever OBS connects. Users are tracked by the Tavern's stable key, so
    renames never break the link.
 
-**Unpublish** removes a player's sources from OBS. **Copy link** puts the view link on the
-clipboard for a source you manage yourself. **Mute** and **Kick** act on a player at the table.
+**Unpublish** removes both of a user's sources from OBS. **Copy link** puts the Player view link
+on the clipboard for a source you manage yourself. **Mute** and **Kick** act on a player at the table.
 **Manage party** opens the Tavern's manage page in your browser for passwords, links and images.
 
 The password is stored encrypted with the macOS keychain, like the OBS password. The stream key
@@ -260,7 +258,7 @@ Settings are stored as JSON at
 
 ```json
 {
-  "version": 9,
+  "version": 10,
   "openOnLaunch": true,
   "showGrips": true,
   "obs": { "autoConnect": false, "host": "127.0.0.1", "port": 4455 },
@@ -316,7 +314,7 @@ Settings are stored as JSON at
 | `menuBarIcon`, `hideDockIcon` | Show the menu bar icon; optionally hide the Dock icon while it is shown. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, default source `width`, `height`, `lockRatio`, `mode` (`auto`, `video`, `avatar`), `audio`, `plate`, `border`; the indicator's `indicator` (publish one with each player), `statusMode` (`status` or `avatar`), `statusWidth`, `statusHeight`; and `players`, a map from the player's Tavern key to `{ source, statusSource, mode, audio, plate }` for each published player (`null` or empty means the default). The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`, `plate`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; and `players`, a map from the user's Tavern key to `{ source, characterSource }`. The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |

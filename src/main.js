@@ -174,28 +174,23 @@ tavern.on('status', () => broadcastStatus());
 tavern.on('connected', () => syncTavern().catch(() => {}));
 tavern.on('party', () => syncTavern().catch(() => {}));
 
-function tavernSourceName(user, kind = 'main') {
-  return kind === 'status' ? `Tavern - ${user.displayName} (talking)` : `Tavern - ${user.displayName}`;
+function tavernSourceName(user, kind = 'player') {
+  return kind === 'character' ? `Tavern - ${user.displayName} (character)` : `Tavern - ${user.displayName}`;
 }
 
-// Effective view options for a player: per-player overrides over the defaults.
-function tavernPlayerOptions(entry) {
+// The Player source: video, or the player image when the camera is off, with
+// the talking border and muted badge as set on the Tavern. Audio always on
+// and routed to the OBS mixer.
+function tavernPlayerSource(user) {
   const t = configStore.get().tavern;
-  return {
-    mode: entry.mode || t.mode,
-    audio: entry.audio === null || entry.audio === undefined ? t.audio : entry.audio,
-    plate: entry.plate === null || entry.plate === undefined ? t.plate : entry.plate,
-    border: t.border,
-    width: t.width,
-    height: t.height,
-  };
+  return { url: tavern.viewUrl(user, { kind: 'player', plate: t.plate }), width: t.playerWidth, height: t.playerHeight, audio: true };
 }
 
-// The talking indicator: a second, smaller source per player showing only the
-// talking and muted images, for overlaying a character bar.
-function tavernStatusOptions() {
+// The Character source: the character image with talking and muted images on
+// top; transparent until they talk or mute when there is no character image.
+function tavernCharacterSource(user) {
   const t = configStore.get().tavern;
-  return { mode: t.statusMode === 'avatar' ? 'avatar' : 'status', audio: false, plate: false, border: false, width: t.statusWidth, height: t.statusHeight };
+  return { url: tavern.viewUrl(user, { kind: 'character' }), width: t.characterWidth, height: t.characterHeight, audio: false };
 }
 
 // Make OBS match the published players: one Browser Source each, named after
@@ -221,7 +216,7 @@ async function syncTavern() {
   report.inputs = inputs.map((i) => i.name);
   const players = { ...t.players };
   let changedConfig = false;
-  const ourNames = () => new Set(Object.values(players).flatMap((p) => [p.source, p.statusSource].filter(Boolean)));
+  const ourNames = () => new Set(Object.values(players).flatMap((p) => [p.source, p.characterSource].filter(Boolean)));
   // One OBS Browser Source: create it, re-point it, follow a rename.
   const ensure = async (key, field, kind, user, wanted) => {
     const entry = players[key];
@@ -253,14 +248,8 @@ async function syncTavern() {
   for (const [key, entry] of entries) {
     const user = tavern.party.find((u) => u.key === key);
     if (!user) continue; // deleted on the server; the card shows it
-    if (entry.source) {
-      const options = tavernPlayerOptions(entry);
-      await ensure(key, 'source', 'main', user, { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: options.audio });
-    }
-    if (entry.statusSource) {
-      const options = tavernStatusOptions();
-      await ensure(key, 'statusSource', 'status', user, { url: tavern.viewUrl(user, options), width: options.width, height: options.height, audio: false });
-    }
+    if (entry.source) await ensure(key, 'source', 'player', user, tavernPlayerSource(user));
+    if (entry.characterSource) await ensure(key, 'characterSource', 'character', user, tavernCharacterSource(user));
   }
   if (changedConfig) {
     const current = configStore.get();
@@ -274,7 +263,7 @@ async function syncTavern() {
 
 // A fresh source name: never take over a Browser Source that is not ours.
 function freeSourceName(user, kind, players) {
-  const ours = new Set(Object.values(players).flatMap((p) => [p.source, p.statusSource].filter(Boolean)));
+  const ours = new Set(Object.values(players).flatMap((p) => [p.source, p.characterSource].filter(Boolean)));
   const taken = new Set(tavernSync.inputs.filter((n) => !ours.has(n)));
   const base = tavernSourceName(user, kind);
   let name = base;
@@ -283,39 +272,35 @@ function freeSourceName(user, kind, players) {
   return name;
 }
 
-async function publishPlayer(key, overrides = {}) {
+// Publish a user's Player source (and the Character source too when the
+// default says so).
+async function publishPlayer(key) {
   const user = tavern.party.find((u) => u.key === key);
-  if (!user) throw new Error('That player is not on the Tavern any more.');
+  if (!user) throw new Error('That user is not on the Tavern any more.');
   const current = configStore.get();
   const players = { ...current.tavern.players };
-  const entry = players[key] || { source: '', statusSource: '' };
-  if (!entry.source) entry.source = freeSourceName(user, 'main', players);
-  if (!entry.statusSource && current.tavern.indicator && overrides.indicator !== false) entry.statusSource = freeSourceName(user, 'status', players);
-  players[key] = {
-    source: entry.source,
-    statusSource: entry.statusSource || '',
-    mode: overrides.mode !== undefined ? overrides.mode : entry.mode || '',
-    audio: overrides.audio !== undefined ? overrides.audio : entry.audio ?? null,
-    plate: overrides.plate !== undefined ? overrides.plate : entry.plate ?? null,
-  };
+  const entry = { source: '', characterSource: '', ...(players[key] || {}) };
+  if (!entry.source) entry.source = freeSourceName(user, 'player', players);
+  if (!entry.characterSource && current.tavern.characterWithPlayer) entry.characterSource = freeSourceName(user, 'character', players);
+  players[key] = entry;
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
   await syncTavern();
   return players[key];
 }
 
-// Turn the talking indicator source on or off for one player.
-async function setIndicator(key, on) {
+// Turn a user's Character source on or off.
+async function setCharacter(key, on) {
   const user = tavern.party.find((u) => u.key === key);
-  if (!user) throw new Error('That player is not on the Tavern any more.');
+  if (!user) throw new Error('That user is not on the Tavern any more.');
   const current = configStore.get();
   const players = { ...current.tavern.players };
-  const entry = { source: '', statusSource: '', mode: '', audio: null, plate: null, ...(players[key] || {}) };
-  if (on && !entry.statusSource) entry.statusSource = freeSourceName(user, 'status', players);
-  if (!on && entry.statusSource) {
-    await removeObsInput(entry.statusSource);
-    entry.statusSource = '';
+  const entry = { source: '', characterSource: '', ...(players[key] || {}) };
+  if (on && !entry.characterSource) entry.characterSource = freeSourceName(user, 'character', players);
+  if (!on && entry.characterSource) {
+    await removeObsInput(entry.characterSource);
+    entry.characterSource = '';
   }
-  if (entry.source || entry.statusSource) players[key] = entry;
+  if (entry.source || entry.characterSource) players[key] = entry;
   else delete players[key];
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
   await syncTavern();
@@ -337,7 +322,7 @@ async function unpublishPlayer(key, removeFromObs = true) {
   configStore.save({ ...current, tavern: { ...current.tavern, players } });
   if (removeFromObs) {
     await removeObsInput(entry.source);
-    await removeObsInput(entry.statusSource);
+    await removeObsInput(entry.characterSource);
   }
   await syncTavern();
 }
@@ -1357,7 +1342,7 @@ function registerIpc() {
       await tavern.disconnect();
     }
     if (next.enabled && next.autoConnect && !tavern.connected && next.url) await tavern.connect().catch(() => {});
-    // Size, mode, audio or plate changes reach every published source.
+    // Size or plate changes reach every published source.
     await syncTavern().catch(() => {});
     broadcastStatus();
     return fullStatus().tavern;
@@ -1379,7 +1364,7 @@ function registerIpc() {
     return fullStatus().tavern;
   });
   ipcMain.handle('tavern:sync', () => syncTavern());
-  ipcMain.handle('tavern:publish', (_event, key, overrides) => publishPlayer(String(key), overrides || {}));
+  ipcMain.handle('tavern:publish', (_event, key) => publishPlayer(String(key)));
   ipcMain.handle('tavern:unpublish', (_event, key, removeFromObs) => unpublishPlayer(String(key), removeFromObs !== false));
   ipcMain.handle('tavern:publishAll', async () => {
     const published = configStore.get().tavern.players;
@@ -1392,12 +1377,11 @@ function registerIpc() {
     for (const key of Object.keys(configStore.get().tavern.players)) await unpublishPlayer(key, removeFromObs !== false);
     return fullStatus().tavern;
   });
-  ipcMain.handle('tavern:indicator', (_event, key, on) => setIndicator(String(key), Boolean(on)));
-  ipcMain.handle('tavern:viewUrl', (_event, key) => {
+  ipcMain.handle('tavern:character', (_event, key, on) => setCharacter(String(key), Boolean(on)));
+  ipcMain.handle('tavern:viewUrl', (_event, key, kind) => {
     const user = tavern.party.find((u) => u.key === key);
-    if (!user) throw new Error('Unknown player.');
-    const entry = configStore.get().tavern.players[key] || {};
-    return tavern.viewUrl(user, tavernPlayerOptions(entry));
+    if (!user) throw new Error('Unknown user.');
+    return kind === 'character' ? tavernCharacterSource(user).url : tavernPlayerSource(user).url;
   });
   ipcMain.handle('tavern:kick', (_event, key) => tavern.kick(String(key)));
   ipcMain.handle('tavern:mute', (_event, key) => tavern.mute(String(key)));

@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_VERSION = 9;
+const CONFIG_VERSION = 10;
 
 // Session groups: windows with the same group name share cookies and storage.
 const DEFAULT_GROUP = 'Main';
@@ -102,15 +102,15 @@ function defaultObs() {
   return { autoConnect: false, host: '127.0.0.1', port: 4455 };
 }
 
-// Coffee Pub Tavern: the party's voice and video server. Each published
-// player is an OBS Browser Source pointed at their view page.
-const TAVERN_MODES = ['auto', 'video', 'avatar'];
-
+// Coffee Pub Tavern: the voice and video server for the people at the table.
+// Each published user gets a Player source (video, or their player image when
+// the camera is off) and optionally a Character source (their character image
+// with talking and muted images on top).
 function defaultTavern() {
   return {
     enabled: false, url: '', login: '', autoConnect: true,
-    width: 640, height: 360, lockRatio: true, mode: 'auto', audio: false, plate: false, border: true,
-    indicator: false, statusMode: 'status', statusWidth: 256, statusHeight: 256,
+    playerWidth: 640, playerHeight: 360, lockRatio: true, plate: false,
+    characterWidth: 256, characterHeight: 256, characterWithPlayer: false,
     players: {},
   };
 }
@@ -122,32 +122,27 @@ function sanitizeTavern(input) {
   if (src.players && typeof src.players === 'object') {
     for (const [key, value] of Object.entries(src.players)) {
       if (!/^[a-z0-9]{4,16}$/.test(key) || !value || typeof value !== 'object') continue;
-      players[key] = {
+      const entry = {
         source: typeof value.source === 'string' ? value.source.trim().slice(0, 200) : '',
-        statusSource: typeof value.statusSource === 'string' ? value.statusSource.trim().slice(0, 200) : '',
-        mode: TAVERN_MODES.includes(value.mode) ? value.mode : '',
-        audio: value.audio === true || value.audio === false ? value.audio : null,
-        plate: value.plate === true || value.plate === false ? value.plate : null,
+        // statusSource was the pre-0.1.9 name of the character source
+        characterSource: typeof (value.characterSource ?? value.statusSource) === 'string' ? (value.characterSource ?? value.statusSource).trim().slice(0, 200) : '',
       };
-      if (!players[key].source && !players[key].statusSource) delete players[key];
+      if (entry.source || entry.characterSource) players[key] = entry;
     }
   }
+  // width/height/statusWidth/statusHeight/indicator were the pre-0.1.9 names
   return {
     enabled: src.enabled === undefined ? d.enabled : Boolean(src.enabled),
     url: sanitizeUrl(src.url).replace(/\/+$/, ''),
     login: typeof src.login === 'string' ? src.login.trim().slice(0, 40) : d.login,
     autoConnect: src.autoConnect === undefined ? d.autoConnect : Boolean(src.autoConnect),
-    width: clamp(toInt(src.width, d.width), 64, 3840),
-    height: clamp(toInt(src.height, d.height), 64, 2160),
+    playerWidth: clamp(toInt(src.playerWidth ?? src.width, d.playerWidth), 64, 3840),
+    playerHeight: clamp(toInt(src.playerHeight ?? src.height, d.playerHeight), 64, 2160),
     lockRatio: src.lockRatio === undefined ? d.lockRatio : Boolean(src.lockRatio),
-    mode: TAVERN_MODES.includes(src.mode) ? src.mode : d.mode,
-    audio: src.audio === undefined ? d.audio : Boolean(src.audio),
     plate: src.plate === undefined ? d.plate : Boolean(src.plate),
-    border: src.border === undefined ? d.border : Boolean(src.border),
-    indicator: src.indicator === undefined ? d.indicator : Boolean(src.indicator),
-    statusMode: src.statusMode === 'avatar' ? 'avatar' : 'status',
-    statusWidth: clamp(toInt(src.statusWidth, d.statusWidth), 32, 3840),
-    statusHeight: clamp(toInt(src.statusHeight, d.statusHeight), 32, 2160),
+    characterWidth: clamp(toInt(src.characterWidth ?? src.statusWidth, d.characterWidth), 32, 3840),
+    characterHeight: clamp(toInt(src.characterHeight ?? src.statusHeight, d.characterHeight), 32, 2160),
+    characterWithPlayer: Boolean(src.characterWithPlayer ?? src.indicator ?? d.characterWithPlayer),
     players,
   };
 }
@@ -371,4 +366,4 @@ class ConfigStore {
   }
 }
 
-module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP, TAVERN_MODES };
+module.exports = { ConfigStore, defaultConfig, sanitizeConfig, LIMITS, REGION_LIMITS, CONFIG_VERSION, DEFAULT_GROUP };
