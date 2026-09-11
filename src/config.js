@@ -148,9 +148,21 @@ function sanitizeTavern(input) {
   };
 }
 
+// Where the control panel was last left; null lets Electron place it.
+function sanitizePanel(input) {
+  if (!input || typeof input !== 'object') return null;
+  const x = toInt(input.x, null);
+  const y = toInt(input.y, null);
+  const width = toInt(input.width, null);
+  const height = toInt(input.height, null);
+  if (x === null || y === null || width === null || height === null) return null;
+  return { x, y, width: clamp(width, 720, 7680), height: clamp(height, 560, 4320) };
+}
+
 function defaultConfig() {
   return {
     version: CONFIG_VERSION,
+    panel: null,
     openOnLaunch: true,
     menuBarIcon: true,
     hideDockIcon: false,
@@ -264,6 +276,7 @@ function sanitizeConfig(input) {
     dock: sanitizeDock(src.dock),
     obs: sanitizeObs(src.obs),
     tavern: sanitizeTavern(src.tavern),
+    panel: sanitizePanel(src.panel),
     views,
   };
 }

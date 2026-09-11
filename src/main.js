@@ -1054,10 +1054,16 @@ function createControlWindow() {
     controlWindow.focus();
     return controlWindow;
   }
+  // Open where it was last left, as long as that spot is still on a display.
+  const remembered = configStore.get().panel;
+  const onScreen = remembered && screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return remembered.x < a.x + a.width - 80 && remembered.x + remembered.width > a.x + 80 && remembered.y >= a.y - 20 && remembered.y < a.y + a.height - 80;
+  });
+  const placement = onScreen ? remembered : { width: 880, height: 760 };
   controlWindow = new BrowserWindow({
     title: `${APP_NAME} - Control Panel - ${REVISION}`,
-    width: 880,
-    height: 760,
+    ...placement,
     minWidth: 720,
     minHeight: 560,
     backgroundColor: '#1a1410',
@@ -1079,7 +1085,20 @@ function createControlWindow() {
       controlWindow.hide();
     }
   });
+  // Remember size and position, a moment after the last move or resize.
+  let panelTimer = null;
+  const rememberPanel = () => {
+    clearTimeout(panelTimer);
+    panelTimer = setTimeout(() => {
+      if (!isAlive(controlWindow) || controlWindow.isMinimized()) return;
+      const current = configStore.get();
+      configStore.save({ ...current, panel: controlWindow.getBounds() });
+    }, 400);
+  };
+  controlWindow.on('move', rememberPanel);
+  controlWindow.on('resize', rememberPanel);
   controlWindow.on('closed', () => {
+    clearTimeout(panelTimer);
     controlWindow = null;
   });
   return controlWindow;
