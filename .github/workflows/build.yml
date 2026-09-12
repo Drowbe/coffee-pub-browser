@@ -78,7 +78,7 @@ jobs:
         run: npm run check
 
       - name: Build app (unsigned)
-        run: npm run dist:win
+        run: npm run build-info && npx electron-builder --win --publish never
 
       - name: Upload installer
         uses: actions/upload-artifact@v7
