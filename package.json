@@ -18,6 +18,7 @@
     "dist": "electron-builder --mac",
     "dist:arm64": "npm run build-info && electron-builder --mac --arm64",
     "dist:x64": "npm run build-info && electron-builder --mac --x64",
+    "dist:win": "npm run build-info && electron-builder --win",
     "pack": "npm run build-info && electron-builder --mac --dir",
     "check": "node --check src/main.js && node --check src/config.js && node --check src/parking.js && node --check src/obs.js && node --check src/preload.js && node --check src/bar-preload.js && node --check src/dock-preload.js && node --check src/dock/dock.js && node --check src/control/control.js && node --check src/bar/bar.js"
   },
@@ -76,6 +77,21 @@
           "path": "/Applications"
         }
       ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "dependencies": {
