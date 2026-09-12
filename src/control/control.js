@@ -1034,7 +1034,7 @@ function renderTavern() {
     const entry = entryFor(user.key);
     card.querySelector('[data-role="name"]').textContent = user.displayName;
     const thumb = card.querySelector('[data-role="thumb"]');
-    const thumbUrl = `${t.url}/img/${encodeURIComponent(user.key)}/player?s=${encodeURIComponent(t.streamKey)}`;
+    const thumbUrl = `${t.url}/img/${encodeURIComponent(user.key)}/profile?s=${encodeURIComponent(t.streamKey)}`;
     if (thumb.dataset.src !== thumbUrl) {
       thumb.dataset.src = thumbUrl;
       thumb.src = thumbUrl;
