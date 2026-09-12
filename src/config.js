@@ -123,6 +123,7 @@ function defaultTavern() {
     playerWidth: 640, playerHeight: 360, lockRatio: true,
     characterWidth: 256, characterHeight: 256, characterWithPlayer: false,
     room: 'lobby', // the Tavern room whose members the Tavern tab shows
+    followAdmin: true, // keep the Tavern tab on whatever room the admin is in
     players: {},
   };
 }
@@ -157,6 +158,7 @@ function sanitizeTavern(input) {
     characterHeight: clamp(toInt(src.characterHeight, d.characterHeight), 32, 2160),
     characterWithPlayer: src.characterWithPlayer === undefined ? d.characterWithPlayer : Boolean(src.characterWithPlayer),
     room: typeof src.room === 'string' && /^[a-z0-9_-]{1,40}$/i.test(src.room) ? src.room : 'lobby',
+    followAdmin: src.followAdmin === undefined ? d.followAdmin : Boolean(src.followAdmin),
     players,
   };
 }

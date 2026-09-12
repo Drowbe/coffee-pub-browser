@@ -935,6 +935,16 @@ $('tavern-room').addEventListener('change', async () => {
   }
   renderTavern();
 });
+$('tavern-follow-admin').addEventListener('change', async () => {
+  const followAdmin = $('tavern-follow-admin').checked;
+  config.tavern.followAdmin = followAdmin;
+  try {
+    status.tavern = await api.tavernSetSettings({ followAdmin });
+  } catch (err) {
+    reportError(err);
+  }
+  renderTavern();
+});
 
 function playerCardFor(user) {
   let card = playerCards.get(user.key);
@@ -971,26 +981,32 @@ function renderTavern() {
   tavernEls.status.classList.toggle('hint-error', t.state === 'error');
 
   // The room chooser: the Lobby and the rooms curated on the Tavern; the
-  // users below are the chosen room's members.
+  // users below are the chosen room's members. "Follow the admin" overrides
+  // the manual choice with whatever room the signed-in admin is in at the
+  // table (a pulled-aside room included), so Studio keeps up automatically.
   const rooms = connected ? t.rooms || [] : [];
-  const chosenId = (config && config.tavern.room) || 'lobby';
+  const followAdmin = Boolean(config && config.tavern.followAdmin);
+  const chosenId = followAdmin ? t.activeRoom || 'lobby' : (config && config.tavern.room) || 'lobby';
   const room = rooms.find((r) => r.id === chosenId) || rooms.find((r) => r.isLobby) || rooms[0] || null;
+  $('tavern-follow-admin').checked = followAdmin;
   // Rebuild the list only when it changed, so a room added on the Tavern
-  // shows up even while the chooser has focus.
+  // shows up even while the chooser has focus. A "pull aside" room is not
+  // hand-pickable; it only ever shows up here via Follow the admin.
   const select = $('tavern-room');
-  const wanted = rooms.map((r) => `${r.id} ${r.isLobby ? `${r.name} (everyone)` : r.name}`);
+  const pickable = rooms.filter((r) => !r.ephemeral || r.id === chosenId);
+  const wanted = pickable.map((r) => `${r.id} ${r.isLobby ? `${r.name} (everyone)` : r.name}`);
   const have = [...select.options].map((o) => `${o.value} ${o.textContent}`);
   if (wanted.join('\n') !== have.join('\n')) {
     select.textContent = '';
-    for (const r of rooms) {
+    for (const r of pickable) {
       const option = document.createElement('option');
       option.value = r.id;
-      option.textContent = r.isLobby ? `${r.name} (everyone)` : r.name;
+      option.textContent = r.isLobby ? `${r.name} (everyone)` : r.ephemeral ? 'Aside' : r.name;
       select.appendChild(option);
     }
   }
   if (room && select.value !== room.id) select.value = room.id;
-  select.disabled = !connected || rooms.length < 2;
+  select.disabled = !connected || followAdmin || pickable.length < 2;
   tavernEls.title.textContent = connected && room ? `${t.serverName}: ${room.name}` : 'Room';
   $('tavern-room-desc').textContent = room ? room.description : '';
   const roomImage = $('tavern-room-image');
@@ -1029,6 +1045,12 @@ function renderTavern() {
   $('tavern-unpublish-all').disabled = !Object.keys(published).some((k) => isPublished(published[k]));
   $('tavern-sync').disabled = !connected;
 
+  // A "pull aside" room is a private word: while the admin is in one, nobody
+  // is on stream, not just whoever isn't in it -- mirrors the enforcement in
+  // Studio's main process (see syncTavern's streamIsPrivate).
+  const activeRoomObj = rooms.find((r) => r.id === t.activeRoom);
+  const streamIsPrivate = Boolean(activeRoomObj && activeRoomObj.ephemeral);
+
   for (const user of party) {
     const card = playerCardFor(user);
     const entry = entryFor(user.key);
@@ -1046,6 +1068,13 @@ function renderTavern() {
     card.querySelector('[data-role="live"]').textContent = user.online
       ? `${inRoom ? `in ${inRoom.name} · ` : ''}${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
       : 'offline';
+    // Off stream: online, but not in the room the admin is in right now (the
+    // room this tab is currently showing when Follow the admin is on), or
+    // the admin is having a private word and nobody is on stream at all.
+    const offStream = Boolean(user.online) && (streamIsPrivate || user.online.room !== t.activeRoom);
+    const offStreamTag = card.querySelector('[data-role="off-stream"]');
+    offStreamTag.hidden = !offStream;
+    offStreamTag.textContent = inRoom && inRoom.ephemeral ? 'ASIDE' : 'OFF STREAM';
     const isOn = isPublished(entry);
     card.querySelector('[data-role="published"]').hidden = !isOn;
     const chips = card.querySelector('[data-role="chips"]');

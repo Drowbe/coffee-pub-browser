@@ -28,6 +28,7 @@ class TavernBridge extends EventEmitter {
     this.branding = null;
     this.party = []; // users with live state, as /api/status reports them
     this.rooms = []; // the Lobby and the rooms an admin curated
+    this.activeRoom = 'lobby'; // the room the stream currently hears (whoever's admin is in it)
     this.pollTimer = null;
     this.reconnectTimer = null;
     this.connecting = null;
@@ -45,6 +46,7 @@ class TavernBridge extends EventEmitter {
       streamKey: this.streamKey,
       party: this.party,
       rooms: this.rooms,
+      activeRoom: this.activeRoom,
       lastPoll: this.lastPoll,
     };
   }
@@ -79,6 +81,7 @@ class TavernBridge extends EventEmitter {
     this.streamKey = '';
     this.party = [];
     this.rooms = [];
+    this.activeRoom = 'lobby';
     this.setState('disconnected', 'Disconnected.');
   }
 
@@ -169,9 +172,11 @@ class TavernBridge extends EventEmitter {
     const rooms = Array.isArray(status.rooms) && status.rooms.length
       ? status.rooms
       : [{ id: 'lobby', name: 'Lobby', description: 'Everyone at the table.', members: next.map((u) => u.key), isLobby: true, hasImage: false }];
-    const changed = JSON.stringify(next) !== JSON.stringify(this.party) || JSON.stringify(rooms) !== JSON.stringify(this.rooms);
+    const activeRoom = typeof status.activeRoom === 'string' ? status.activeRoom : 'lobby';
+    const changed = JSON.stringify(next) !== JSON.stringify(this.party) || JSON.stringify(rooms) !== JSON.stringify(this.rooms) || activeRoom !== this.activeRoom;
     this.party = next;
     this.rooms = rooms;
+    this.activeRoom = activeRoom;
     if (changed) {
       this.emit('party', this.party);
       this.emit('status', this.status());

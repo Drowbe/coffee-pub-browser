@@ -256,6 +256,27 @@ async function syncTavern() {
     if (entry.source) await ensure(key, 'source', 'player', user, tavernPlayerSource(user));
     if (entry.characterSource) await ensure(key, 'characterSource', 'character', user, tavernCharacterSource(user));
   }
+  // "Follow the admin": the stream should show only the room the admin is
+  // actually in right now. A published user who has stepped out of it gets
+  // their scene items hidden, not unpublished, so their ticks and OBS
+  // source survive and they reappear the moment they are back in the
+  // admin's room. A user who is not currently online at all is left alone:
+  // publishing ahead of when someone joins is a normal workflow and should
+  // not hide anything. A "pull aside" room is a private word by design, so
+  // while the admin is in one, nobody is on stream, the admin's own
+  // published source included -- being together there does not put the
+  // two of you on the recording, it takes you both off it.
+  if (t.followAdmin) {
+    const activeRoomObj = tavern.rooms.find((r) => r.id === tavern.activeRoom);
+    const streamIsPrivate = Boolean(activeRoomObj?.ephemeral);
+    for (const [key, entry] of entries) {
+      const user = tavern.party.find((u) => u.key === key);
+      if (!user) continue;
+      const onStream = !user.online || (!streamIsPrivate && user.online.room === tavern.activeRoom);
+      if (entry.source) await obs.setSourceVisible(entry.source, onStream).catch(() => {});
+      if (entry.characterSource) await obs.setSourceVisible(entry.characterSource, onStream).catch(() => {});
+    }
+  }
   if (changedConfig) {
     const current = configStore.get();
     configStore.save({ ...current, tavern: { ...current.tavern, players } });

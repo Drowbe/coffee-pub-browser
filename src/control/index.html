@@ -210,6 +210,7 @@
             <h2 id="tavern-title">Room</h2>
           </div>
           <div class="view-actions">
+            <label class="check" title="Keep this on whatever room the admin is in at the table"><input type="checkbox" id="tavern-follow-admin"> Follow the admin</label>
             <select id="tavern-room" title="The room whose users are listed below"></select>
           </div>
         </div>
@@ -353,6 +354,7 @@
           <strong data-role="name"></strong>
           <span class="hint" data-role="live"></span>
           <span class="tag" data-role="published" hidden>IN OBS</span>
+          <span class="tag tag-dim" data-role="off-stream" hidden title="Online, but not in the room the admin is in right now">OFF STREAM</span>
         </div>
         <div class="player-source">
           <span class="chips" data-role="chips"></span>

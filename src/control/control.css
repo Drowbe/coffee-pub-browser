@@ -168,6 +168,12 @@ main {
   color: #1a1206;
 }
 
+.tag.tag-dim {
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

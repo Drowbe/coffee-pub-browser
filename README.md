@@ -241,13 +241,17 @@ match the published users again: it creates any source that is missing, re-point
 source at its link and size, and follows renames; the app also does this whenever OBS
 connects or the Tavern reports a change. The link button on a card puts the Player view link
 on the clipboard for a source you manage yourself. Muting and kicking players is done on the
-Tavern's manage page, which **Manage party** opens in your browser, along with passwords,
+Tavern's manage page, which **Manage users** opens in your browser, along with passwords,
 links, images and rooms.
 
 The **Room** card at the top of the Tavern tab picks which room's users are listed: the
 **Lobby** holds everyone, and the rooms an admin curates on the Tavern's Rooms tab hold the
-users they picked. **Publish all** publishes the chosen room's users. For now a room is a
-group for the stream; it does not change who hears whom at the table.
+users they picked. **Publish all** publishes the chosen room's users. **Follow the admin**,
+on by default, keeps this on whatever room the signed-in admin is actually in at the table —
+including a room they were pulled into for a private word — instead of a fixed pick; untick it
+to choose a room by hand. This is a real change of who's on the stream, not just a label: only
+the room shown here gets published, so pulling someone aside genuinely takes them off it until
+they are back.
 
 The password is stored encrypted with the macOS keychain, like the OBS password. The stream key
 the sources use is fetched from the server at sign-in and never has to be copied.
@@ -340,7 +344,7 @@ Settings are stored as JSON at
 | `wakeAudioDelay` | Seconds after a page loads before its audio is woken (**Wake audio after** on the Session tab, 10 to 300, default 30). Foundry ignores clicks until it has fully loaded, which can take longer than the page says. |
 | `dock` | The edge dock: `enabled`, `side` (`right` or `left`) and `overlap`, the points of a docked window left on screen (0 slides it fully off). It lives on the display chosen for auto-arrange. |
 | `obs` | OBS WebSocket connection: `autoConnect`, `host`, `port`. The password lives in `obs-secret.bin` next to the config, encrypted. |
-| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; `room`, the Tavern room whose users the Tavern tab lists (`lobby` by default); and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
+| `tavern` | Coffee Pub Tavern: `enabled`, `url`, `login`, `autoConnect`, the Player source's `playerWidth`, `playerHeight`, `lockRatio`; the Character source's `characterWidth`, `characterHeight`, `characterWithPlayer`; `room`, the Tavern room whose users the Tavern tab lists by hand (`lobby` by default); `followAdmin` (default `true`), which overrides `room` with whatever room the signed-in admin is actually in at the table and hides a published user's OBS sources while they are off it; and `players`, a map from the user's Tavern key to `{ player, character, source, characterSource }` (the two ticks, and the OBS source names while published). The password lives in `tavern-secret.bin`. |
 | `label` | Shown in the window title, so it is also the name OBS lists. |
 | `url` | Page to load. Must be `http` or `https`; empty shows a placeholder. |
 | `width`, `height` | Content size in points (100 to 7680). |
