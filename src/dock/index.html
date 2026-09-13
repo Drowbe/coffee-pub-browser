@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>Coffee Pub Dock</title>
+  <link rel="stylesheet" href="dock.css">
+</head>
+<body>
+  <div class="pill" id="pill">
+    <div class="strip" id="strip">
+      <img class="cup" src="../assets/logo.png" alt="" title="Coffee Pub Studio">
+      <span class="dots" id="dots"></span>
+      <span class="rec-dot" id="rec-dot" title="Recording" hidden></span>
+      <span class="live-dot" id="live-dot" title="Streaming" hidden></span>
+    </div>
+    <div class="panel" id="panel">
+      <header class="panel-head">
+        <span class="title">Coffee Pub</span>
+        <span class="obs-state" id="obs-state">OBS offline</span>
+      </header>
+      <div class="live-row" id="live-row">
+        <span class="pillet rec" id="rec" hidden>REC <b id="rec-time"></b></span>
+        <span class="pillet live" id="live" hidden>LIVE <b id="live-time"></b></span>
+        <span class="scene" id="scene"></span>
+      </div>
+      <div class="cards" id="cards"></div>
+      <div class="tools">
+        <button class="tool" data-action="parkAll" type="button">Dock all</button>
+        <button class="tool" data-action="restoreAll" type="button">Undock all</button>
+        <button class="tool" data-action="startAll" type="button">Start all</button>
+        <button class="tool" data-action="stopAll" type="button">Stop all</button>
+        <button class="tool" data-action="sync" type="button" id="sync">Sync OBS</button>
+        <button class="tool" data-action="wakeAudio" type="button" title="Send every window the click that lets its audio start">Wake audio</button>
+        <button class="tool" data-action="panel" type="button">Control panel</button>
+      </div>
+    </div>
+  </div>
+  <script src="dock.js"></script>
+</body>
+</html>

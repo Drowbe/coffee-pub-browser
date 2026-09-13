@@ -1,0 +1,345 @@
+:root {
+  --bg: rgba(30, 22, 17, 0.96);
+  --bg-card: rgba(44, 33, 25, 0.9);
+  --bg-hover: rgba(58, 44, 33, 0.95);
+  --border: rgba(200, 135, 58, 0.35);
+  --text: #f1e6d8;
+  --text-dim: #b3a293;
+  --accent: #c8873a;
+  --ok: #6fae6b;
+  --rec: #d9534f;
+  --live: #4f8fd9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The pill hugs the screen edge with only its inner corners rounded. It
+   sits collapsed in the middle of the (transparent, full-size) window and
+   grows inward on hover; the strip stays at the edge the whole time. */
+:root {
+  --collapsed-w: 36px;
+  --collapsed-h: 124px;
+}
+
+.pill {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: var(--collapsed-w);
+  height: var(--collapsed-h);
+  display: flex;
+  flex-direction: row-reverse;
+  background: linear-gradient(160deg, rgba(52, 38, 28, 0.97), var(--bg) 60%);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 14px 0 0 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: width 0.22s ease, height 0.22s ease;
+}
+
+body.expanded .pill {
+  width: 100%;
+  height: 100%;
+}
+
+body.side-left .pill {
+  right: auto;
+  left: 0;
+  flex-direction: row;
+  border-right: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 14px 14px 0;
+}
+
+.strip {
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.cup {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.dots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(111, 174, 107, 0.6);
+}
+
+.dot.parked {
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
+
+.rec-dot,
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: auto;
+}
+
+.rec-dot {
+  background: var(--rec);
+  box-shadow: 0 0 8px rgba(217, 83, 79, 0.8);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+.live-dot {
+  background: var(--live);
+  box-shadow: 0 0 8px rgba(79, 143, 217, 0.8);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 4px 10px 10px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease 0.08s, visibility 0s linear 0.26s;
+}
+
+body.side-left .panel {
+  padding: 12px 10px 10px 4px;
+}
+
+body.expanded .panel {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.18s ease 0.1s, visibility 0s;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+
+.obs-state {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.obs-state.on {
+  color: var(--ok);
+}
+
+.live-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 20px;
+}
+
+.pillet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pillet b {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.pillet.rec {
+  background: rgba(217, 83, 79, 0.2);
+  color: #ffb3b0;
+}
+
+.pillet.live {
+  background: rgba(79, 143, 217, 0.2);
+  color: #b7d3f5;
+}
+
+.scene {
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: var(--bg-card);
+  padding: 7px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.card:hover {
+  background: var(--bg-hover);
+}
+
+.card.parked {
+  border-color: var(--accent);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-label {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-size {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #000;
+  display: block;
+}
+
+.thumb-empty {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.card-foot .state {
+  font-weight: 600;
+}
+
+.card.parked .card-foot .state {
+  color: var(--accent);
+}
+
+.card-foot .src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tool {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool:hover {
+  background: rgba(200, 135, 58, 0.25);
+  border-color: var(--border);
+}
+
+.tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

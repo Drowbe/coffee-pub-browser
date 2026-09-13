@@ -1,0 +1,94 @@
+:root {
+  --bg: #1a1410;
+  --bg-hover: #2b211a;
+  --border: #3b2e24;
+  --text: #f1e6d8;
+  --text-dim: #a8998a;
+  --accent: #c8873a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.bar {
+  height: 28px; /* must match BAR_HEIGHT in src/main.js */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  -webkit-app-region: drag;
+  outline: none;
+}
+
+.bar:hover {
+  background: var(--bg-hover);
+}
+
+.bar:focus-visible {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.bar:active {
+  cursor: grabbing;
+}
+
+.dots {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background-image: radial-gradient(circle, var(--text-dim) 1.2px, transparent 1.4px);
+  background-size: 5px 5px;
+  opacity: 0.8;
+}
+
+.label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.control {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.readout {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.readout b {
+  color: var(--text);
+  font-weight: 500;
+}

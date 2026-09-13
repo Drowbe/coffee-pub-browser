@@ -1,0 +1,62 @@
+'use strict';
+
+// Exposes a small, explicit API to the control panel renderer.
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('coffeePub', {
+  getConfig: () => ipcRenderer.invoke('config:get'),
+  saveConfig: (config) => ipcRenderer.invoke('config:save', config),
+  resetConfig: () => ipcRenderer.invoke('config:reset'),
+  getStatus: () => ipcRenderer.invoke('status:get'),
+  getDisplays: () => ipcRenderer.invoke('displays:get'),
+  openView: (id) => ipcRenderer.invoke('view:open', id),
+  closeView: (id) => ipcRenderer.invoke('view:close', id),
+  reloadView: (id) => ipcRenderer.invoke('view:reload', id),
+  resetView: (id) => ipcRenderer.invoke('view:reset', id),
+  devToolsView: (id) => ipcRenderer.invoke('view:devtools', id),
+  wakeAudioView: (id) => ipcRenderer.invoke('view:wakeAudio', id),
+  obsSetSettings: (settings) => ipcRenderer.invoke('obs:setSettings', settings),
+  obsSetPassword: (password) => ipcRenderer.invoke('obs:setPassword', password),
+  obsConnect: () => ipcRenderer.invoke('obs:connect'),
+  obsDisconnect: () => ipcRenderer.invoke('obs:disconnect'),
+  obsSync: () => ipcRenderer.invoke('obs:sync'),
+  setWindowSource: (id, patch) => ipcRenderer.invoke('windowSource:set', id, patch),
+  addWindowSource: (id) => ipcRenderer.invoke('windowSource:add', id),
+  obsCreateRegionSource: (id, regionId) => ipcRenderer.invoke('obs:createRegionSource', id, regionId),
+  obsRemoveSource: (inputName) => ipcRenderer.invoke('obs:removeSource', inputName),
+  setRegionEnabled: (id, regionId, enabled) => ipcRenderer.invoke('regions:setEnabled', id, regionId, enabled),
+  snapshotView: (id) => ipcRenderer.invoke('view:snapshot', id),
+  measureView: (id, selector) => ipcRenderer.invoke('view:measure', id, selector),
+  saveRegion: (id, region) => ipcRenderer.invoke('regions:save', id, region),
+  removeRegion: (id, regionId) => ipcRenderer.invoke('regions:remove', id, regionId),
+  regionLimits: () => ipcRenderer.invoke('regions:limits'),
+  arrangeViews: (displayId) => ipcRenderer.invoke('views:arrange', displayId),
+  addView: () => ipcRenderer.invoke('views:add'),
+  removeView: (id) => ipcRenderer.invoke('views:remove', id),
+  collapseViews: () => ipcRenderer.invoke('views:collapse'),
+  expandViews: () => ipcRenderer.invoke('views:expand'),
+  parkView: (id) => ipcRenderer.invoke('views:park', id),
+  restoreView: (id) => ipcRenderer.invoke('views:restore', id),
+  openAll: () => ipcRenderer.invoke('views:openAll'),
+  closeAll: () => ipcRenderer.invoke('views:closeAll'),
+  clearSession: () => ipcRenderer.invoke('session:clear'),
+  revealConfig: () => ipcRenderer.invoke('config:reveal'),
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
+  tavernSetSettings: (settings) => ipcRenderer.invoke('tavern:setSettings', settings),
+  tavernSetPassword: (password) => ipcRenderer.invoke('tavern:setPassword', password),
+  tavernConnect: () => ipcRenderer.invoke('tavern:connect'),
+  tavernDisconnect: () => ipcRenderer.invoke('tavern:disconnect'),
+  tavernSync: () => ipcRenderer.invoke('tavern:sync'),
+  tavernPublish: (key) => ipcRenderer.invoke('tavern:publish', key),
+  tavernUnpublish: (key, removeFromObs) => ipcRenderer.invoke('tavern:unpublish', key, removeFromObs),
+  tavernPublishAll: () => ipcRenderer.invoke('tavern:publishAll'),
+  tavernUnpublishAll: (removeFromObs) => ipcRenderer.invoke('tavern:unpublishAll', removeFromObs),
+  tavernSetChoice: (key, field, on) => ipcRenderer.invoke('tavern:setChoice', key, field, on),
+  tavernViewUrl: (key, kind) => ipcRenderer.invoke('tavern:viewUrl', key, kind),
+  tavernOpenManage: () => ipcRenderer.invoke('tavern:openManage'),
+  onStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('status', listener);
+    return () => ipcRenderer.removeListener('status', listener);
+  },
+});
