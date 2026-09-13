@@ -3,7 +3,7 @@
 #
 #   1. git and fnm (Node version manager), via winget
 #   2. Node 22 as the default Node
-#   3. ~\Developer with a clone of every Coffee Pub repository
+#   3. ~\Developer with a clone of each repo in $Repos
 #   4. npm install for coffee-pub-studio
 #
 # Run it from PowerShell with:
@@ -12,6 +12,13 @@
 # Or download it first and edit the $Repos list to taste before running:
 #   iwr https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/win-dev-setup.ps1 -OutFile win-dev-setup.ps1
 #   .\win-dev-setup.ps1
+#
+# Unlike the Mac version of this script, $Repos here does NOT include the
+# Foundry module repos (coffee-pub-blacksmith and friends). On a Windows dev
+# machine those already live inside Foundry's own Data/modules folder --
+# that's the one copy Foundry actually loads -- so cloning them again here
+# would just create a second, unsynced copy of each. This script only
+# touches the two projects that have no such required location.
 
 $ErrorActionPreference = 'Stop'
 
@@ -21,23 +28,6 @@ $NodeVersion = '22'
 $Repos = @(
   'coffee-pub-studio'
   'coffee-pub-tavern'
-  'coffee-pub-blacksmith'
-  'coffee-pub-merchant'
-  'coffee-pub-regent'
-  'coffee-pub-curator'
-  'coffee-pub-crier'
-  'coffee-pub-bibliosoph'
-  'coffee-pub-librarian'
-  'coffee-pub-cartographer'
-  'coffee-pub-artificer'
-  'coffee-pub-herald'
-  'coffee-pub-squire'
-  'coffee-pub-minstrel'
-  'coffee-pub-monarch'
-  'coffee-pub-scribe'
-  'coffee-pub-vault'
-  'coffee-pub-lib'
-  'coffee-pub-bubo'
 )
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Yellow }
