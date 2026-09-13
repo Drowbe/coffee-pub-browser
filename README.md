@@ -367,10 +367,6 @@ Settings are stored as JSON at
 
 Pushing a tag that starts with `v` from your machine triggers the same release build.
 
-*Both setup scripts below are fetched from `claude/mac-chrome-obs-wrapper-9i1lh6`, this
-repository's current default branch, rather than `main`, which still predates the Studio
-rewrite. Once that branch is merged, swap `main` back in.*
-
 ## Setting up a Mac for development
 
 `scripts/mac-dev-setup.sh` installs Homebrew, git, fnm with Node 22, GitHub Desktop and
@@ -378,7 +374,7 @@ VS Code, creates `~/Developer`, clones every Coffee Pub repository into it and r
 `npm install` for this app. It is safe to re-run; each step skips what is already done.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/claude/mac-chrome-obs-wrapper-9i1lh6/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
+curl -fsSL https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/mac-dev-setup.sh -o ~/mac-dev-setup.sh
 bash ~/mac-dev-setup.sh
 ```
 
@@ -399,7 +395,7 @@ editor -- point Cursor, Zed, VS Code, or the `claude` CLI at the cloned folders;
 nothing beyond the repo being on disk and git already knowing your GitHub credentials.
 
 ```powershell
-irm https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/claude/mac-chrome-obs-wrapper-9i1lh6/scripts/win-dev-setup.ps1 | iex
+irm https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/win-dev-setup.ps1 | iex
 ```
 
 Afterwards, run the app from source with:
