@@ -21,6 +21,7 @@ NODE_VERSION="22"
 CASKS=(github visual-studio-code)   # GitHub Desktop, VS Code. Remove any you do not want.
 REPOS=(
   coffee-pub-studio
+  coffee-pub-tavern
   coffee-pub-blacksmith
   coffee-pub-merchant
   coffee-pub-regent

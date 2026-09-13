@@ -386,6 +386,26 @@ git pull
 npm start
 ```
 
+## Setting up a Windows machine for development
+
+`scripts/win-dev-setup.ps1` installs git and fnm with Node 22 (via winget), creates
+`~\Developer`, clones every Coffee Pub repository into it and runs `npm install` for this
+app. It is safe to re-run; each step skips what is already done. It does not install an
+editor -- point Cursor, Zed, VS Code, or the `claude` CLI at the cloned folders; they need
+nothing beyond the repo being on disk and git already knowing your GitHub credentials.
+
+```powershell
+irm https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/win-dev-setup.ps1 | iex
+```
+
+Afterwards, run the app from source with:
+
+```powershell
+cd ~\Developer\coffee-pub-studio
+git pull
+npm start
+```
+
 ## Project layout
 
 ```
