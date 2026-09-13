@@ -389,10 +389,13 @@ npm start
 ## Setting up a Windows machine for development
 
 `scripts/win-dev-setup.ps1` installs git and fnm with Node 22 (via winget), creates
-`~\Developer`, clones every Coffee Pub repository into it and runs `npm install` for this
-app. It is safe to re-run; each step skips what is already done. It does not install an
-editor -- point Cursor, Zed, VS Code, or the `claude` CLI at the cloned folders; they need
-nothing beyond the repo being on disk and git already knowing your GitHub credentials.
+`~\Developer`, clones this repo and coffee-pub-tavern into it, and runs `npm install` for
+this app. It is safe to re-run; each step skips what is already done. It does not install
+an editor -- point Cursor, Zed, VS Code, or the `claude` CLI at the cloned folders; they
+need nothing beyond the repo being on disk and git already knowing your GitHub credentials.
+Unlike the Mac setup, it deliberately leaves the Foundry module repos alone: on Windows
+those already live inside Foundry's own `Data/modules` folder, so cloning them again here
+would just create a second, unsynced copy of each.
 
 ```powershell
 irm https://raw.githubusercontent.com/Drowbe/coffee-pub-studio/main/scripts/win-dev-setup.ps1 | iex
