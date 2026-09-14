@@ -1045,12 +1045,6 @@ function renderTavern() {
   $('tavern-unpublish-all').disabled = !Object.keys(published).some((k) => isPublished(published[k]));
   $('tavern-sync').disabled = !connected;
 
-  // A "pull aside" room is a private word: while the admin is in one, nobody
-  // is on stream, not just whoever isn't in it -- mirrors the enforcement in
-  // Studio's main process (see syncTavern's streamIsPrivate).
-  const activeRoomObj = rooms.find((r) => r.id === t.activeRoom);
-  const streamIsPrivate = Boolean(activeRoomObj && activeRoomObj.ephemeral);
-
   for (const user of party) {
     const card = playerCardFor(user);
     const entry = entryFor(user.key);
@@ -1069,9 +1063,11 @@ function renderTavern() {
       ? `${inRoom ? `in ${inRoom.name} · ` : ''}${user.online.micOn ? 'mic on' : 'mic off'} · ${user.online.cameraOn ? 'camera on' : 'camera off'}`
       : 'offline';
     // Off stream: online, but not in the room the admin is in right now (the
-    // room this tab is currently showing when Follow the admin is on), or
-    // the admin is having a private word and nobody is on stream at all.
-    const offStream = Boolean(user.online) && (streamIsPrivate || user.online.room !== t.activeRoom);
+    // room this tab is currently showing when Follow the admin is on) -- a
+    // pull-aside room is no different: whoever the admin is aside with is
+    // on stream same as any other room, and whoever they stepped out of is
+    // off stream same as any other room.
+    const offStream = Boolean(user.online) && user.online.room !== t.activeRoom;
     const offStreamTag = card.querySelector('[data-role="off-stream"]');
     offStreamTag.hidden = !offStream;
     offStreamTag.textContent = inRoom && inRoom.ephemeral ? 'ASIDE' : 'OFF STREAM';
