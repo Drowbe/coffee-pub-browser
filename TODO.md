@@ -4,13 +4,18 @@ Things agreed on but not built yet, roughly in order.
 
 ## Tavern
 
-- ~~**Rooms, phase 2: pull aside.**~~ Done: an admin pulls anyone in their current room into a
-  private room together, both move automatically, a "Back to the table" button returns them to
-  the Lobby, and the room disappears on its own once both have left. The one-conversation rule
-  is in too: everyone not in the admin's current room is "off stream" (or "aside" for the pair
-  in a pull-aside room), and Coffee Pub Studio only publishes whoever is in it -- while the
-  admin is in a pull-aside room specifically, nobody is on stream at all, not just the two of
-  them together.
+Bigger Tavern-side design work (multi-admin "who drives the stream," multiple simultaneous
+asides with a director-style switch, per-room character settings, room types, the admin page's
+editing moving to each user's own profile) lives in that repo's own TODO.md now, not here.
+
+- ~~**Rooms, phase 2: pull aside.**~~ Done: an admin pulls one or more people in their current
+  room into a private room together, everyone moves automatically, a "Back to the table" button
+  returns them together to the room they were pulled from (not always the Lobby), and the room
+  disappears on its own once everyone has left. The one-conversation rule is in too: everyone
+  not in the admin's current room is "off stream" (or "aside" for those with the admin in a
+  pull-aside room) -- a pull-aside room is private from the rest of the table, not from the
+  recording, so while the admin is aside with someone that conversation is what's on stream,
+  same as any other room they could be in.
 - ~~**Room switching in Studio.**~~ Done as "Follow the admin" (on by default): the Tavern tab
   and the OBS sources both track whatever room the admin is actually in.
 
@@ -28,4 +33,8 @@ Things agreed on but not built yet, roughly in order.
   note in the README.
 - **Release v0.1.9** once testing is green: bump `package.json`, run the Build macOS app
   workflow with the tag.
-- **PR #1** merges once `main` is the default branch on GitHub.
+- **Default branch on GitHub is still the old feature branch**, not `main` -- PR #1 and #2
+  merged into `main` anyway, so it never blocked anything, but it's still wrong: a fresh clone,
+  and anyone opening a PR without picking a base by hand, lands against the wrong branch. Switch
+  it in Settings > Branches once this repo's last open PR is merged, then the feature branch can
+  go away for good and everything from here on develops straight against `main`.
