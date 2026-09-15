@@ -33,4 +33,8 @@ editing moving to each user's own profile) lives in that repo's own TODO.md now,
   note in the README.
 - **Release v0.1.9** once testing is green: bump `package.json`, run the Build macOS app
   workflow with the tag.
-- **PR #1** merges once `main` is the default branch on GitHub.
+- **Default branch on GitHub is still the old feature branch**, not `main` -- PR #1 and #2
+  merged into `main` anyway, so it never blocked anything, but it's still wrong: a fresh clone,
+  and anyone opening a PR without picking a base by hand, lands against the wrong branch. Switch
+  it in Settings > Branches once this repo's last open PR is merged, then the feature branch can
+  go away for good and everything from here on develops straight against `main`.
